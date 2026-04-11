@@ -98,12 +98,12 @@ class Plugin {
     private function init_services() {
         // تهيئة خدمات التصنيف
         if (class_exists('Beiruttime\\OSINT\\Services\\Classifier')) {
-            // Classifier::getInstance();
+            Classifier::getInstance();
         }
         
         // تهيئة خدمات سجل الأخبار
         if (class_exists('Beiruttime\\OSINT\\Services\\Newslog')) {
-            // Newslog::getInstance();
+            Newslog::getInstance();
         }
     }
     
