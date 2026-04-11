@@ -113,17 +113,12 @@ class Plugin {
     private function init_admin() {
         // تهيئة قائمة الإدارة
         if (class_exists('Beiruttime\\OSINT\\Admin\\AdminMenu')) {
-            // AdminMenu::getInstance();
-        }
-        
-        // تهيئة صفحات الإدارة
-        if (class_exists('Beiruttime\\OSINT\\Admin\\AdminPages')) {
-            // AdminPages::getInstance();
+            AdminMenu::getInstance();
         }
         
         // تهيئة معالجات AJAX
         if (class_exists('Beiruttime\\OSINT\\Admin\\AjaxHandlers')) {
-            // AjaxHandlers::getInstance();
+            AjaxHandlers::getInstance();
         }
     }
     

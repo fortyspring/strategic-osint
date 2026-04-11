@@ -1,39 +1,36 @@
 ```
-# WordPress plugin specific ignores
+# Dependencies
+node_modules/
+vendor/
+
+# Build artifacts
+dist/
+build/
+*.min.js
+*.min.css
+*.map
+
+# Logs and temp files
 *.log
 *.tmp
 *.swp
 
-# Environment files
+# Environment
 .env
 .env.local
-.env.*
+*.env.*
 
-# Backup and temp files
-*.bak
-*.backup
-*~
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
 .DS_Store
 Thumbs.db
 
 # WordPress specific
-wp-config.php
 wp-content/cache/
-wp-content/uploads/
-
-# Development tools
-.vscode/
-.idea/
-*.sublime-project
-*.sublime-workspace
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Icon?
-Thumbs.db
+*.sql
 ```
