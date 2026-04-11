@@ -47,17 +47,18 @@ spl_autoload_register(function ($class) {
  * سيتم إزالتها في الإصدارات المستقبلية
  */
 
-// تحميل ملفات التوافق للخلفية
-$compatibility_files = [
-    BEIRUTTIME_OSINT_PRO_PLUGIN_DIR . 'includes/classifier-service.php',
-    BEIRUTTIME_OSINT_PRO_PLUGIN_DIR . 'includes/newslog-service.php',
-];
+// تحميل ملفات التوافق للخلفية (سيتم إزالتها في الإصدارات المستقبلية)
+// تم نقل الوظائف إلى فئات معيارية في src/services/
+// $compatibility_files = [
+//     BEIRUTTIME_OSINT_PRO_PLUGIN_DIR . 'includes/classifier-service.php',
+//     BEIRUTTIME_OSINT_PRO_PLUGIN_DIR . 'includes/newslog-service.php',
+// ];
 
-foreach ($compatibility_files as $file) {
-    if (file_exists($file)) {
-        require_once $file;
-    }
-}
+// foreach ($compatibility_files as $file) {
+//     if (file_exists($file)) {
+//         require_once $file;
+//     }
+// }
 
 /**
  * تهيئة البرنامج الإضافي

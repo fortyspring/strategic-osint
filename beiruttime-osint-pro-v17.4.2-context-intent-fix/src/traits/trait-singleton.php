@@ -35,8 +35,10 @@ trait Singleton {
     
     /**
      * منع إنشاء نسخ متعددة
+     * 
+     * يجب على الفئة المستخدمة لهذه السمة أن تعرف __construct() الخاصة بها
      */
-    private function __construct() {}
+    // private function __construct() {} // تم نقله إلى الفئات الفردية
     
     /**
      * منع الاستنساخ
