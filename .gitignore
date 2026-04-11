@@ -1,81 +1,29 @@
 ```
-# Environment
+# Environment specific
 .env
 .env.local
-*.env.*
+.env.*
 
-# Logs and temporary files
+# Logs
 *.log
+
+# Temporary files
 *.tmp
 *.swp
 
-# Editors
-.vscode/
-.idea/
-
 # Dependencies
-node_modules/
 vendor/
 
 # Build artifacts
 dist/
 build/
-target/
-*.o
-*.obj
-*.exe
-*.dll
-*.so
-*.a
-*.out
+*.phar
 
-# Python specific
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage
-coverage/
-htmlcov/
-.pytest_cache/
-.mypy_cache/
+# IDE
+.vscode/
+.idea/
 
-# Compiled and binary files
-*.class
-*.jar
-*.war
-*.ear
-*.zip
-*.tar
-*.gz
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
-
-# System files
+# OS
 .DS_Store
 Thumbs.db
 ```
