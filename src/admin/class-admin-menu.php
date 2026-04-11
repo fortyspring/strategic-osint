@@ -13,7 +13,7 @@ use Beiruttime\OSINT\Traits\Singleton;
 
 // تعريف الثابت إذا لم يكن معرفاً
 if (!defined('BEIRUTTIME_OSINT_PRO_PLUGIN_DIR')) {
-    define('BEIRUTTIME_OSINT_PRO_PLUGIN_DIR', plugin_dir_path(dirname(__DIR__, 2)));
+    define('BEIRUTTIME_OSINT_PRO_PLUGIN_DIR', plugin_dir_path(dirname(__DIR__, 2)) . '/');
 }
 
 /**
@@ -29,6 +29,8 @@ class AdminMenu {
     private function __construct() {
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
+        add_action('wp_ajax_beiruttime_full_reanalysis', [$this, 'handle_full_reanalysis']);
+        add_action('wp_ajax_beiruttime_get_stats', [$this, 'handle_get_stats']);
     }
     
     /**
@@ -340,6 +342,118 @@ class AdminMenu {
         <?php
     }
     
+    /**
+     * معالجة إعادة التحليل الكامل (AJAX)
+     */
+    public function handle_full_reanalysis() {
+        check_ajax_referer('beiruttime-osint-nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'غير مصرح']);
+            return;
+        }
+
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'so_newslog';
+        
+        // التحقق من وجود الجدول
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '$table_name'") == $table_name;
+        
+        if (!$table_exists) {
+            wp_send_json_error(['message' => 'جدول الأخبار غير موجود']);
+            return;
+        }
+
+        $total = $wpdb->get_var("SELECT COUNT(*) FROM $table_name");
+        $batch_size = isset($_POST['batch_size']) ? intval($_POST['batch_size']) : 100;
+        $offset = isset($_POST['offset']) ? intval($_POST['offset']) : 0;
+        
+        // جلب دفعة من الأخبار
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table_name ORDER BY id ASC LIMIT %d OFFSET %d",
+            $batch_size,
+            $offset
+        ));
+
+        if (empty($rows)) {
+            wp_send_json_success([
+                'done' => true,
+                'processed' => $offset,
+                'total' => $total,
+                'message' => 'اكتمل إعادة التحليل'
+            ]);
+            return;
+        }
+
+        // معالجة كل خبر (هنا يتم استدعاء دوال التصنيف)
+        $processed = 0;
+        if (class_exists('Beiruttime\\OSINT\\Services\\Classifier')) {
+            $classifier = Classifier::getInstance();
+            
+            foreach ($rows as $row) {
+                $text = $row->title . ' ' . $row->content;
+                
+                // تحديث التصنيف
+                $actor = $classifier->extractNamedNonMilitaryActor($text);
+                if ($actor) {
+                    $wpdb->update(
+                        $table_name,
+                        ['actor' => $actor],
+                        ['id' => $row->id]
+                    );
+                }
+                $processed++;
+            }
+        }
+
+        wp_send_json_success([
+            'done' => false,
+            'processed' => $offset + $processed,
+            'total' => $total,
+            'message' => sprintf('تمت معالجة %d من %d', $offset + $processed, $total)
+        ]);
+    }
+
+    /**
+     * معالجة جلب الإحصائيات (AJAX)
+     */
+    public function handle_get_stats() {
+        check_ajax_referer('beiruttime-osint-nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'غير مصرح']);
+            return;
+        }
+
+        global $wpdb;
+        $newslog_table = $wpdb->prefix . 'so_newslog';
+        $predictions_table = $wpdb->prefix . 'so_predictions';
+        
+        $stats = [
+            'news_count' => 0,
+            'predictions_count' => 0,
+            'actors' => []
+        ];
+
+        // عدد الأخبار
+        if ($wpdb->get_var("SHOW TABLES LIKE '$newslog_table'") == $newslog_table) {
+            $stats['news_count'] = $wpdb->get_var("SELECT COUNT(*) FROM $newslog_table");
+            
+            // إحصائيات الجهات الفاعلة
+            $actors = $wpdb->get_results("SELECT actor, COUNT(*) as count FROM $newslog_table WHERE actor IS NOT NULL AND actor != '' GROUP BY actor ORDER BY count DESC LIMIT 10");
+            foreach ($actors as $a) {
+                $stats['actors'][] = ['name' => $a->actor, 'count' => $a->count];
+            }
+        }
+
+        // عدد التنبؤات
+        if ($wpdb->get_var("SHOW TABLES LIKE '$predictions_table'") == $predictions_table) {
+            $stats['predictions_count'] = $wpdb->get_var("SELECT COUNT(*) FROM $predictions_table");
+        }
+
+        wp_send_json_success($stats);
+    }
+
     /**
      * تحميل أصول الإدارة
      */
