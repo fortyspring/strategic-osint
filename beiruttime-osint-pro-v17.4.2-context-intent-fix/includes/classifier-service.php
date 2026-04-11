@@ -1,6 +1,14 @@
 <?php
 if (!defined('ABSPATH')) exit;
 
+/**
+ * نظام التصنيف الموحد للأخبار - Unified News Classification System
+ * يمنع التكرار ويوفر مسار تقييم واضح ومنظم
+ */
+
+/**
+ * الذاكرة السياقية: مطابقة العناوين مع الأحداث السابقة
+ */
 function sod_context_memory_infer(string $text): array {
     $text = so_clean_text($text);
     if ($text === '') return [];
@@ -101,12 +109,27 @@ function sod_extract_named_nonmilitary_actor(string $text): string {
     return '';
 }
 
+/**
+ * الحاكم الذكي: يوحّد قرارات التصنيف ويمنع التناقضات
+ * 
+ * المسار:
+ * 1. إذا كان السياق غير عسكري وبدون هجوم → فاعل غير محسوم أو فاعل مُسمّى
+ * 2. إذا كانت هناك إشارة واضحة للمقاومة → المقاومة الإسلامية (أولوية قصوى)
+ * 3. إذا كان الفاعل الحالي عسكري لكن بدون هجوم فعلي → إزالة النسب الخاطئ
+ */
 function sod_governor_ai(array $result, string $text): array {
     $text = so_clean_text($text);
+    
+    // كشف الهجوم الحقيقي (kinetic action)
     $has_attack = preg_match('/(غارة|قصف|استهداف|هجوم|اشتباك|اقتحام|توغل|صاروخ|صواريخ|مسيّرة|مسيرة|دبابة|ثكنة|كمين|أغار|اعتداء إسرائيلي|إطلاق نار|استطلاع بطائرة مسيّرة|تم رصد)/ui', $text) === 1;
+    
+    // كشف السياق غير العسكري
     $is_non_military = sod_is_non_military_context($text);
+    
+    // استخراج الفاعل المُسمّى من النصوص السياسية/الإعلامية
     $named_actor = sod_extract_named_nonmilitary_actor($text);
 
+    // ── القاعدة 1: السياق غير العسكري بدون هجوم ──
     if ($is_non_military && !$has_attack) {
         $result['primary_actor'] = $named_actor !== '' ? $named_actor : 'فاعل غير محسوم';
         $result['secondary_actor'] = '';
@@ -116,13 +139,16 @@ function sod_governor_ai(array $result, string $text): array {
         return $result;
     }
 
+    // ── القاعدة 2: المقاومة الإسلامية (أولوية عالية - RETURN فوراً) ──
     if (preg_match('/(استهدفنا|استهدف مجاهدونا|بيان صادر عن المقاومة الإسلامية|المقاومة الإسلامية في لبنان|المقاومة الاسلامية \(|ثكنة يعرا|مستوطنة أدميت|مستوطنة نهاريا)/ui', $text)) {
         $result['primary_actor'] = 'المقاومة الإسلامية (حزب الله)';
         $result['confidence'] = max((int)($result['confidence'] ?? 0), 90);
         $result['reason'] = 'governor-force-resistance';
+        return $result;
     }
 
-    if (!$has_attack && (($result['primary_actor'] ?? '') === 'جيش العدو الإسرائيلي' || ($result['primary_actor'] ?? '') === 'المقاومة الإسلامية (حزب الله)')) {
+    // ── القاعدة 3: إزالة النسب العسكري الخاطئ عندما لا يوجد هجوم ──
+    if (!$has_attack && in_array($result['primary_actor'] ?? '', ['جيش العدو الإسرائيلي', 'المقاومة الإسلامية (حزب الله)'], true)) {
         $result['primary_actor'] = $named_actor !== '' ? $named_actor : 'فاعل غير محسوم';
         $result['secondary_actor'] = '';
         $result['target'] = '';
