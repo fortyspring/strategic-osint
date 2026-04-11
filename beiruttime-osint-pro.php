@@ -3,7 +3,7 @@
  * Plugin Name: Beiruttime OSINT Pro — نظام الرصد الاستخباراتي الموحد V17
  * Plugin URI: https://t.me/osint_lb
  * Description: V17 — الجيل الاحترافي الكامل: مركز قيادة استخباراتي [sod_command_deck]، بنوك المعلومات (أشخاص/أماكن/أسلحة/عمليات)، خوارزميات تصنيف متقدمة، رادار التهديد SVG، مخطط النشاط الساعي، رسم الكيانات والعلاقات، تتبع الساحات الساخنة، دعم كامل V11+V12+V16 في ملف واحد.
- * Version: 17.1.8 Jannah Safe + Admin Multi Actor Columns
+ * Version: 17.2.0 Enhanced Classification + Rich Dictionaries
  * Author: Mohammad Qassem / Beirut Time
  * Author URI: https://t.me/osint_lb
  * Text Domain: beiruttime-osint-pro
@@ -25,52 +25,162 @@ function sod_get_all_banks(){
         'weapons' => (array)get_option('sod_bank_weapons', []),
     ];
 }
-function sod_match_bank($text, $bank_values){
+
+/**
+ * مطابقة متقدمة مع دعم الأوزان والكلمات المفتاحية والسياق
+ */
+function sod_match_bank($text, $bank_values, $options = []) {
     $matches = [];
-    foreach ($bank_values as $value){
-        $value = trim((string)$value);
-        if ($value === '') continue;
+    $text_lower = mb_strtolower((string)$text);
+    $text_clean = so_clean_text($text);
+    
+    foreach ($bank_values as $key => $value) {
+        // دعم المصفوفات ذات المفاتيح والقيم (للأوزان المخصصة)
+        if (is_array($value)) {
+            $term = $value['term'] ?? '';
+            $weight = (float)($value['weight'] ?? 1.0);
+            $keywords = isset($value['keywords']) ? (array)$value['keywords'] : [$term];
+        } else {
+            $term = trim((string)$value);
+            $weight = 1.0;
+            $keywords = [$term];
+        }
+        
+        if ($term === '') continue;
+        
         $score = 0;
-        if (stripos($text, $value) !== false) $score += 10;
-        similar_text($text, $value, $percent);
-        if ($percent > 70) $score += $percent/10;
-        if ($score > 0) $matches[$value] = $score;
+        $matched_keyword = '';
+        
+        // 1. مطابقة تامة للكلمة (أعلى وزن)
+        foreach ($keywords as $kw) {
+            $kw = trim((string)$kw);
+            if ($kw === '') continue;
+            
+            // مطابقة تامة
+            if (stripos($text, $kw) !== false) {
+                $score += 15 * $weight;
+                $matched_keyword = $kw;
+                
+                // مكافأة للمطابقة ككلمة منفصلة
+                if (preg_match('/\b' . preg_quote($kw, '/') . '\b/ui', $text)) {
+                    $score += 10 * $weight;
+                }
+            }
+        }
+        
+        // 2. تشابه نصي عام
+        similar_text($text_clean, $term, $percent);
+        if ($percent > 65) {
+            $score += ($percent - 65) / 3.5 * $weight;
+        }
+        
+        // 3. مطابقة الجذور (للغة العربية)
+        if (function_exists('sod_arabic_root_match')) {
+            $root_score = sod_arabic_root_match($text_clean, $term);
+            if ($root_score > 0) {
+                $score += $root_score * $weight;
+            }
+        }
+        
+        // 4. مكافأة السياق القريب
+        if (!empty($options['context_words'])) {
+            foreach ((array)$options['context_words'] as $ctx_word) {
+                if (stripos($text, $ctx_word) !== false && $score > 0) {
+                    $score += 5 * $weight;
+                    break;
+                }
+            }
+        }
+        
+        if ($score > 0) {
+            $matches[$term] = [
+                'score' => round($score, 2),
+                'keyword' => $matched_keyword,
+                'weight' => $weight
+            ];
+        }
     }
-    arsort($matches);
+    
+    // ترتيب حسب النتيجة
+    uasort($matches, function($a, $b) {
+        return $b['score'] <=> $a['score'];
+    });
+    
     return $matches;
 }
+
+/**
+ * استخراج الجذر العربي للمطابقة الدلالية
+ */
+function sod_arabic_root_match($text, $term) {
+    // جذور شائعة للأفعال المتعلقة بالصراع
+    $roots = [
+        'قصف' => ['يقصف', 'قصف', 'تقصف', 'مقصف'],
+        'ضرب' => ['يضرب', 'ضرب', 'تضرب', 'مضروب'],
+        'استهد' => ['يستهدف', 'استهدف', 'تستهدف', 'مستهدف'],
+        'أطل' => ['يطلق', 'أطلق', 'تطلق', 'إطلاق'],
+        'داهم' => ['يداهم', 'داهم', 'تداهم', 'مداهمة'],
+        'اغت' => ['يغتال', 'اغتيال', 'تغتال', 'مغتال'],
+    ];
+    
+    $score = 0;
+    foreach ($roots as $root => $variations) {
+        if (stripos($term, $root) !== false) {
+            foreach ($variations as $var) {
+                if (stripos($text, $var) !== false) {
+                    $score += 8;
+                }
+            }
+        }
+    }
+    return $score;
+}
+
 function sod_resolve_field($text, $bank){
     $banks = sod_get_all_banks();
     $vals = isset($banks[$bank]) ? $banks[$bank] : [];
     $m = sod_match_bank($text, $vals);
     return !empty($m) ? array_key_first($m) : '';
 }
+
 function sod_resolve_actor($text){
     $banks = sod_get_all_banks();
     $m = sod_match_bank($text, $banks['actors']);
     return !empty($m) ? array_key_first($m) : 'فاعل غير محسوم';
 }
+
 function sod_classify_event_v3($event){
     $text = so_clean_text((string)($event['title'] ?? '') . ' ' . (string)($event['content'] ?? ''));
+    
+    // استخراج سياق إضافي لتحسين المطابقة
+    $context_words = [];
+    if (preg_match('/(لبنان|فلسطين|سوريا|العراق|اليمن|إيران|إسرائيل)/u', $text, $m)) {
+        $context_words[] = $m[1];
+    }
+    
     return [
         'actor_v2' => sod_resolve_actor($text),
         'target_v2' => sod_resolve_field($text, 'targets'),
         'context_actor' => sod_resolve_field($text, 'contexts'),
         'intent' => sod_resolve_field($text, 'intents'),
         'weapon_v2' => sod_resolve_field($text, 'weapons'),
+        '_match_details' => [
+            'actor_matches' => sod_match_bank($text, sod_get_all_banks()['actors'], ['context_words' => $context_words]),
+            'weapon_matches' => sod_match_bank($text, sod_get_all_banks()['weapons'], ['context_words' => $context_words]),
+        ]
     ];
 }
 
 // ==========================================================================
 // 1. الثوابت الموحدة — Unified Constants
 // ==========================================================================
-define('SO_VERSION',          '17.1.0');
+define('SO_VERSION',          '17.2.0');
 define('SO_PLUGIN_DIR',       plugin_dir_path(__FILE__));
 define('SO_PLUGIN_URL',       plugin_dir_url(__FILE__));
 define('SO_TELEGRAM_LINK',    'https://t.me/osint_lb');
 define('SO_SYNC_LOCK_TTL',    120);
 
-define('SOD_VERSION',         '17.1.0');
+define('SOD_VERSION',         '17.2.0');
 define('SOD_PLUGIN_DIR',      plugin_dir_path(__FILE__));
 define('SOD_PLUGIN_URL',      plugin_dir_url(__FILE__));
 define('SOD_TG_LINK',         'https://t.me/osint_lb');
@@ -2721,14 +2831,65 @@ function sod_normalize_bank_key(string $key): string {
 
 function sod_get_visible_learning_banks_defaults(): array {
     return [
-        'actors'  => [],
+        'actors'  => [
+            'المقاومة الإسلامية (حزب الله)',
+            'الجيش اللبناني',
+            'جيش العدو الإسرائيلي',
+            'الحرس الثوري الإيراني',
+            'الجيش الإيراني',
+            'الجيش السوري',
+            'الحشد الشعبي',
+            'أنصار الله (الحوثيون)',
+            'حماس',
+            'الجهاد الإسلامي',
+            'الجيش الأمريكي',
+            'الجيش الروسي',
+            'الجيش الأوكراني',
+        ],
         'types'   => ['العسكري والأمني','تكتيكي/ميداني','الدبلوماسي والسياسي','الاقتصادي واللوجستي','السيبراني والتقني','البرنامج النووي وأسلحة الدمار','الإعلامي والمعلوماتي','عام','سياسي','إعلامي','اقتصادي/لوجستي'],
         'levels'  => ['تكتيكي','عملياتي','استراتيجي','سياسي'],
         'regions' => ['لبنان','سوريا','فلسطين','الأراضي المحتلة (إسرائيل)','إيران','العراق','اليمن','الخليج','الولايات المتحدة','غير محدد'],
-        'targets' => [],
-        'contexts'=> [],
-        'intents' => [],
-        'weapons' => [],
+        'targets' => [
+            'قواعد عسكرية',
+            'مواقع رادار',
+            'مستودعات أسلحة',
+            'مطارات',
+            'موانئ',
+            'مناطق سكنية',
+            'بنية تحتية',
+            'مركبات عسكرية',
+            'زوارق حربية',
+            'طائرات مسيرة',
+        ],
+        'contexts'=> [
+            'رد على اعتداء',
+            'عمل استباقي',
+            'تصعيد متبادل',
+            'رسالة ردع',
+            'حرب إلكترونية',
+            'عمل مشترك',
+        ],
+        'intents' => [
+            'هجوم',
+            'دفاع',
+            'ردع',
+            'انتقام',
+            'تحذير',
+            'استطلاع',
+            'تدريب',
+        ],
+        'weapons' => [
+            'مسيرة',
+            'صاروخ باليستي',
+            'صاروخ كروز',
+            'صاروخ / قذائف',
+            'مدفعية',
+            'دبابات / آليات',
+            'طيران حربي',
+            'دفاعات جوية',
+            'زوارق حربية',
+            'سلاح إلكتروني',
+        ],
     ];
 }
 
@@ -2816,29 +2977,54 @@ function sod_get_bank_values(string $key): array {
     return $banks[$canon] ?? [];
 }
 
-function sod_add_bank_value(string $key, string $value): array {
+function sod_add_bank_value(string $key, string $value, array $extra = []): array {
     global $wpdb;
     $canon = sod_normalize_bank_key($key);
     $value = trim((string)$value);
     if ($value === '') return sod_get_visible_learning_banks();
+    
     $banks = sod_get_visible_learning_banks();
     if (!isset($banks[$canon])) $banks[$canon] = [];
-    if (!in_array($value, $banks[$canon], true)) $banks[$canon][] = $value;
+    
+    // دعم إضافة قيمة مع أوزان وكلمات مفتاحية مخصصة
+    $entry = !empty($extra) ? array_merge(['term' => $value], $extra) : $value;
+    
+    if (!in_array($value, $banks[$canon], true) && !in_array($entry, $banks[$canon], true)) {
+        $banks[$canon][] = $entry;
+    }
+    
     if ($canon === 'actors') {
         $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}so_dict_actors WHERE name_ar=%s", $value));
         if (!$exists) {
             $next_id = (int)$wpdb->get_var("SELECT COALESCE(MAX(id),0)+1 FROM {$wpdb->prefix}so_dict_actors");
             $actor_id = 'ACT_CUSTOM_' . $next_id;
-            $_res_actor = sod_db_safe_insert("{$wpdb->prefix}so_dict_actors", ['actor_id'=>$actor_id,'name_ar'=>$value,'threat_weight'=>1.0,'base_threat'=>50,'keywords'=>$value]);
+            $keywords = $extra['keywords'] ?? $value;
+            $threat_weight = (float)($extra['threat_weight'] ?? 1.0);
+            $base_threat = (int)($extra['base_threat'] ?? 50);
+            $_res_actor = sod_db_safe_insert("{$wpdb->prefix}so_dict_actors", [
+                'actor_id' => $actor_id,
+                'name_ar' => $value,
+                'threat_weight' => $threat_weight,
+                'base_threat' => $base_threat,
+                'keywords' => is_array($keywords) ? implode(',', $keywords) : $keywords
+            ]);
         }
     } elseif ($canon === 'weapons') {
         $exists = $wpdb->get_var($wpdb->prepare("SELECT id FROM {$wpdb->prefix}so_dict_weapons WHERE name_ar=%s", $value));
         if (!$exists) {
             $next_id = (int)$wpdb->get_var("SELECT COALESCE(MAX(id),0)+1 FROM {$wpdb->prefix}so_dict_weapons");
             $weapon_id = 'WPN_CUSTOM_' . $next_id;
-            $_res_weapon = sod_db_safe_insert("{$wpdb->prefix}so_dict_weapons", ['weapon_id'=>$weapon_id,'name_ar'=>$value,'impact_score'=>50,'keywords'=>$value]);
+            $keywords = $extra['keywords'] ?? $value;
+            $impact_score = (int)($extra['impact_score'] ?? 50);
+            $_res_weapon = sod_db_safe_insert("{$wpdb->prefix}so_dict_weapons", [
+                'weapon_id' => $weapon_id,
+                'name_ar' => $value,
+                'impact_score' => $impact_score,
+                'keywords' => is_array($keywords) ? implode(',', $keywords) : $keywords
+            ]);
         }
     }
+    
     sod_save_visible_learning_banks($banks);
     return sod_get_visible_learning_banks();
 }
