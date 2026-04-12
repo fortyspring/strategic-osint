@@ -1,10 +1,15 @@
-```
-# PHP compiled files
-*.phpc
-*.php~
+# Compiled and build artifacts
+*.pyc
+__pycache__/
 
 # Dependencies
-vendor/
+.venv/
+venv/
+node_modules/
+*.egg-info/
+dist/
+build/
+target/
 
 # Logs and temp files
 *.log
@@ -14,13 +19,30 @@ vendor/
 # Environment
 .env
 .env.local
-.env.*
+*.env.*
 
 # Editors
 .vscode/
 .idea/
+*.swo
 
-# OS generated files
+# OS specific
 .DS_Store
 Thumbs.db
-```
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Python specific
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Cache
+.mypy_cache/
+.pytest_cache/
+.gradle/
+.cargo/

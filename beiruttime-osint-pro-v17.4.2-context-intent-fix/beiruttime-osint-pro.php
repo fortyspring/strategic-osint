@@ -3480,8 +3480,9 @@ class SO_Cron_Manager {
             $keep_id = (int)$events[0]['id'];
             $del_ids = array_map(fn($e)=>(int)$e['id'], array_slice($events, 1));
             if (!empty($del_ids)) {
-                $placeholders = implode(',', $del_ids);
-                $wpdb->query("DELETE FROM $t WHERE id IN ($placeholders) AND score < 140");
+                // Use prepared statement for DELETE with IN clause
+                $placeholders = implode(',', array_fill(0, count($del_ids), '%d'));
+                $wpdb->query($wpdb->prepare("DELETE FROM $t WHERE id IN ($placeholders) AND score < 140", ...$del_ids));
                 $removed += count($del_ids);
             }
         }
@@ -5049,6 +5050,15 @@ class SO_Prediction_Engine {
 add_action('init', 'sod_external_cron_handler');
 function sod_external_cron_handler() {
     if (!isset($_GET['sod_cron'])) return;
+    
+    // Rate limiting: max 10 requests per minute per IP
+    $rate_limit_key = 'sod_cron_rate_' . md5($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    $rate_data = get_transient($rate_limit_key);
+    if ($rate_data !== false && (int)$rate_data >= 10) {
+        status_header(429); echo json_encode(['success' => false, 'message' => 'Rate limit exceeded']); exit;
+    }
+    set_transient($rate_limit_key, ((int)$rate_data) + 1, 60);
+    
     $saved_key = trim((string)get_option('so_external_cron_key', ''));
     $provided  = trim((string)($_GET['key']??''));
     if ($saved_key === '' || !hash_equals($saved_key, $provided)) {
@@ -7876,12 +7886,12 @@ class SO_Admin_UI {
                     'hash_id'         => md5(uniqid($title_clean, true)),
                     'title'           => $title_clean,
                     'war_data'        => sanitize_textarea_field(wp_unslash($_POST['manual_content']??'')),
-                    'link'            => esc_url_raw($_POST['manual_url']??''),
+                    'link'            => esc_url_raw(wp_unslash($_POST['manual_url']??'')),
                     'source_name'     => 'يدوي',
                     'score'           => min(500, max(0, intval($_POST['manual_score']??50))),
                     'region'          => sanitize_text_field(wp_unslash($_POST['manual_region']??'')),
                     'actor_v2'        => sanitize_text_field(wp_unslash($_POST['manual_actor']??'')),
-                    'intel_type'      => sanitize_text_field($_POST['manual_intel_type']??'general'),
+                    'intel_type'      => sanitize_text_field(wp_unslash($_POST['manual_intel_type']??'general')),
                     'event_timestamp' => $ts,
                     'tactical_level'  => 'operational',
                     'llm_verified'    => 1,
@@ -7917,7 +7927,11 @@ class SO_Admin_UI {
         // Save dashboard settings
         if (isset($_POST['so_save_dashboards']) && check_admin_referer('so_save_dashboards_nonce')) {
             $opts4 = ['sod_powerbi_default_hours','sod_powerbi_auto_refresh','sod_ticker_auto_refresh','sod_threat_auto_refresh','sod_ticker_flip_speed','sod_news_ticker_marquee_duration'];
-            foreach ($opts4 as $opt) if (isset($_POST[$opt])) update_option($opt, (int)$_POST[$opt]);
+            foreach ($opts4 as $opt) {
+                if (isset($_POST[$opt])) {
+                    update_option($opt, max(0, min(9999, (int)$_POST[$opt])));
+                }
+            }
 
             $old_slug = sod_dashboard_slug();
             $route_enabled = !empty($_POST['sod_dashboard_route_enabled']) ? 1 : 0;
