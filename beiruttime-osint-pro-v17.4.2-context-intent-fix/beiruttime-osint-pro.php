@@ -7699,6 +7699,13 @@ class SO_Admin_UI {
         if (strpos($hook, 'beiruttime-osint') === false && strpos($hook, 'strategic-osint') === false) return;
         wp_enqueue_style('so-admin-font', 'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap', [], null);
         $page = sanitize_text_field($_GET['page'] ?? '');
+        
+        // Fix: Prevent loading problematic scripts on reports page
+        if ($page === 'strategic-osint-reports') {
+            // Only load minimal assets for reports page - no heavy JS
+            return;
+        }
+        
         if ($page === 'strategic-osint-newslog') {
             $admin_css = __DIR__ . '/assets/css/admin-pages.css';
             wp_enqueue_style(
