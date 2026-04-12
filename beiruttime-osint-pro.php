@@ -5781,11 +5781,16 @@ function so_ma_admin_add_columns_css() {
     $page = sanitize_text_field((string)$_GET['page']);
     if (strpos($page, 'osint') === false && strpos($page, 'strategic') === false && strpos($page, 'beiruttime') === false) return;
 
-    echo '<style>
+    // استخدام ob_start لتجنب تحذير "Headers already sent"
+    ob_start();
+    ?>
+    <style>
     .so-ma-meta{min-width:190px;line-height:1.55}
     .so-ma-meta div{margin:0 0 2px}
     .column-so_ma_primary,.column-so_ma_target,.column-so_ma_context,.column-so_ma_intent{width:10%}
-    </style>';
+    </style>
+    <?php
+    ob_end_flush();
 }
 add_action('admin_head', 'so_ma_admin_add_columns_css', 50);
 }
