@@ -1,66 +1,109 @@
 ```
-# Compiled and build artifacts
-*.pyc
-__pycache__/
-
-# Dependencies
-.venv/
-venv/
-node_modules/
-
-# Logs and temp files
-*.log
-*.tmp
-*.swp
-
 # Environment
 .env
 .env.local
-*.env.*
+.env.*
 
-# Editors
-.vscode/
-.idea/
+# Dependencies
+vendor/
+
+# Logs
+*.log
 
 # OS generated files
 .DS_Store
 Thumbs.db
 
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+dist/
+build/
+target/
+*.o
+*.obj
+*.out
+*.exe
+*.dll
+*.so
+*.a
+
+# Python specific
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+
+# Node.js specific
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Java specific
+*.class
+*.jar
+*.war
+*.ear
+.META-INF/
+
+# C/C++ specific
+*.a
+*.lib
+*.obj
+*.o
+*.so
+*.dylib
+
+# Go specific
+*.exe
+*.test
+*.prof
+*.syso
+
+# Ruby specific
+*.gem
+*.rbc
+.bundle/
+.coverage/
+.ruby-version
+
 # Coverage reports
 coverage/
 htmlcov/
 .coverage
+*.coveragerc
 
-# Python specific
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+# Testing
+.rspec
+spec/reports/
+test/tmp/
+test/fixtures/*.valid_after_
+*.junit.xml
 
-# Compressed files
+# Temporary folders
+tmp/
+temp/
+.DS_Store?
+._*
+
+# Archives
 *.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
+*.tar.gz
+*.tar.bz2
+*.tar.xz
 *.7z
 *.rar
+*.gz
+*.bz2
+*.xz
 *.zst
 *.lz4
 *.lzh
@@ -71,8 +114,156 @@ wheels/
 *.Z
 *.lz
 *.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
+
+# Cache directories
+.cache/
+.cargo/
+.go/
+.hugo_build.lock
+.jekyll-cache/
+.sass-cache/
+.yarn/
+.pnp.*
+.yarn-state.yml
+.yarn-metadata.json
+.vitepress/cache/
+.nuxt/
+.next/
+.vercel/
+.output/
+
+# IDE specific
+.vs/
+.vsc/
+.atom/
+.brackets/
+.netbeans/
+.project/
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Configuration
+config/secrets.yml
+config/credentials.yml.enc
+
+# Docker
+.dockerenv
+Dockerfile*
+docker-compose*
+
+# PHP specific
+composer.lock
+vendor/
+
+# Generated documentation
+docs/_build/
+docs/build/
+
+# Vim
+*.un~
+Session.vim
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Eclipse
+.metadata
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.settings/
+.loadpath
+.recommenders
+
+# IntelliJ IDEA
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# Visual Studio
+.vs/
+*.VC.db
+*.VC.VC.opendb
+
+# Xcode
+*.xcodeproj
+*.xcworkspace
+*.pbxuser
+*.mode1v3
+*.perspectivev3
+*.xccheckout
+*.moved-aside
+*.xcuserstate
+.xcprojectdata
+
+# Android Studio
+*.iml
+.gradle/
+local.properties
+.pro
+.cxx/
+.externalNativeBuild/
+.cmake/
+
+# Qt Creator
+*.pro.user
+*.pro.user.*
+*.qbs.user
+*.qbs.user.*
+*.moc
+*.moc.cpp
+*.qm
+*.prl
+*.pri
+
+# CodeLite
+*.project
+*.workspace
+*.user
+*.session
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# JetBrains
+*.iws
+*.iml
+*.ipr
+.idea/
+
+# Vim
+[._]*.s[a-w][a-z]
+[._]s[a-w][a-z]
+*.un~
+Session.vim
+.netrwhist
+*~
 ```
