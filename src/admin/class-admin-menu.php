@@ -25,10 +25,7 @@ class AdminMenu {
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         
-        // AJAX handlers لإعادة التحليل والإحصائيات
-        add_action('wp_ajax_so_ajax_reanalyze_batch', [$this, 'handle_full_reanalysis']);
-        add_action('wp_ajax_so_ajax_reanalyze_reset', [$this, 'handle_reanalyze_reset']);
-        add_action('wp_ajax_beiruttime_get_stats', [$this, 'handle_get_stats']);
+        // ملاحظة: معالجات AJAX موجودة في فئة AjaxHandlers
     }
     
     /**
