@@ -1,6 +1,199 @@
 <?php
 if (!defined('ABSPATH')) exit;
 
+/**
+ * تصنيف حدث باستخدام البنية المعيارية
+ * يستخدم لتحسين عمليات التصنيف في سجل الأخبار
+ */
+function sod_classify_article_complete(string $title, string $content = '', string $source = ''): array {
+    $text = so_clean_text($title . ' ' . $content);
+    if ($text === '') return ['error' => 'empty_text'];
+    
+    // استخراج سياق إضافي لتحسين المطابقة
+    $context_words = [];
+    if (preg_match('/(لبنان|فلسطين|سوريا|العراق|اليمن|إيران|ايران|إسرائيل|اسرائيل)/u', $text, $m)) {
+        $context_words[] = $m[1];
+    }
+    
+    // تحديد نوع المحتوى
+    $bucket = so_detect_content_bucket_exists() ? so_detect_content_bucket($text, $source) : 'general';
+    $mode = sod_detect_event_mode_standalone($text);
+    
+    // تحليل الفاعل
+    $actor_result = sod_actor_engine_v2_standalone($text);
+    $actor_ai = sod_governor_ai($actor_result, $text);
+    
+    // تطبيق قواعد خاصة للتصريحات والتقارير
+    if ($bucket === 'statement' || $bucket === 'report' || sod_is_non_military_context($text)) {
+        $named_actor = sod_extract_named_nonmilitary_actor($text);
+        if ($mode !== 'kinetic') {
+            $actor_ai['primary_actor'] = $named_actor !== '' ? $named_actor : 'فاعل غير محسوم';
+            $actor_ai['secondary_actor'] = '';
+            $actor_ai['target'] = '';
+            $actor_ai['confidence'] = $named_actor !== '' ? max((int)($actor_ai['confidence'] ?? 20), 70) : min((int)($actor_ai['confidence'] ?? 20), 35);
+            $actor_ai['reason'] = $named_actor !== '' ? 'statement-named-actor' : 'statement-or-report-context';
+        }
+    }
+    
+    // استخراج الحقول الأخرى
+    $target_v2 = $actor_ai['target'] !== '' ? $actor_ai['target'] : sod_resolve_field_standalone($text, 'targets');
+    $context_actor = ($bucket === 'statement' || $bucket === 'report') ? '' : sod_resolve_field_standalone($text, 'contexts');
+    $intent = sod_resolve_field_standalone($text, 'intents');
+    $weapon_v2 = sod_resolve_field_standalone($text, 'weapons');
+    $region = sod_resolve_field_standalone($text, 'regions');
+    
+    // تطبيق قواعد الوضع
+    if ($mode === 'defensive_alert') {
+        $context_actor = 'إنذار دفاعي';
+        $intent = 'دفاع';
+        if ($weapon_v2 === '') $weapon_v2 = 'إنذار / اعتراض';
+    } elseif ($mode === 'kinetic') {
+        if ($intent === '') $intent = 'هجوم';
+    }
+    
+    // تحسين الفاعل النهائي
+    $actor_final = sod_force_requested_actor_rule($actor_ai['primary_actor'], $region, $title);
+    
+    return [
+        'actor_v2' => $actor_final,
+        'region' => $region,
+        'target_v2' => $target_v2,
+        'context_actor' => $actor_ai['secondary_actor'] !== '' ? $actor_ai['secondary_actor'] : $context_actor,
+        'intent' => $intent,
+        'weapon_v2' => $weapon_v2,
+        'intel_type' => $bucket,
+        'tactical_level' => sod_calculate_tactical_level($actor_final, $bucket, $mode),
+        'score' => sod_calculate_score_standalone($title, $actor_final, $bucket, $mode),
+        '_ai_v2' => [
+            'confidence' => (int)($actor_ai['confidence'] ?? 20),
+            'reason' => (string)($actor_ai['reason'] ?? ''),
+            'bucket' => $bucket,
+            'mode' => $mode,
+        ],
+    ];
+}
+
+/**
+ * التحقق من وجود دالة so_detect_content_bucket
+ */
+function so_detect_content_bucket_exists(): bool {
+    return function_exists('so_detect_content_bucket');
+}
+
+/**
+ * كشف وضع الحدث - نسخة مستقلة
+ */
+function sod_detect_event_mode_standalone(string $text): string {
+    $lower = mb_strtolower($text);
+    $has_kinetic = preg_match('/(غارة|قصف|استهداف|هجوم|اشتباك|اقتحام|توغل|صاروخ|صواريخ|مسيّرة|مسيرة|دبابة|ثكنة|كمين|أغار|اعتداء|إطلاق نار|انفجار|تفجير|اغتيال)/ui', $text) === 1;
+    $has_alert = preg_match('/(صفارات الإنذار|صافرات الإنذار|انذار احمر|إنذار أحمر|قيادة الجبهة الداخلية|الإنذار المبكر|تسوفار|رصد إطلاق صواريخ|من المحتمل تفعيل الإنذارات|سقوط شضايا صاروخ اعتراضي)/ui', $lower) === 1;
+    
+    if ($has_kinetic) return 'kinetic';
+    if ($has_alert) return 'defensive_alert';
+    return 'general';
+}
+
+/**
+ * تحليل الفاعل - نسخة مستقلة
+ */
+function sod_actor_engine_v2_standalone(string $text): array {
+    $patterns = [
+        'جيش العدو الإسرائيلي' => '/(الجيش الإسرائيلي|جيش الاحتلال|غارة إسرائيلية|قصف إسرائيلي|اعتداء إسرائيلي|طيران الاحتلال|الطيران الحربي المعادي|طائرات الاحتلال)/ui',
+        'المقاومة الإسلامية (حزب الله)' => '/(المقاومة الإسلامية|حزب الله|استهدفنا|استهدف مجاهدونا|بيان صادر عن المقاومة الإسلامية)/ui',
+        'كتائب القسام (حماس)' => '/(^|\s)(حماس|حركة حماس|كتائب القسام)(\s|:|$)/ui',
+        'إيران' => '/(مصادر إيرانية|مصدر إيراني|مسؤول عسكري إيراني|إيران|ايران|طهران)/ui',
+        'الولايات المتحدة' => '/(ترامب|ترمب|واشنطن|الرئاسة الأميركية|الإدارة الأميركية|البيت الأبيض|البيت الابيض)/ui',
+    ];
+    
+    foreach ($patterns as $label => $regex) {
+        if (preg_match($regex, $text)) {
+            return [
+                'primary_actor' => $label,
+                'secondary_actor' => '',
+                'target' => '',
+                'confidence' => 75,
+                'reason' => 'pattern-match',
+                'actor_matches' => [$label],
+            ];
+        }
+    }
+    
+    $named = sod_extract_named_nonmilitary_actor($text);
+    if ($named !== '') {
+        return [
+            'primary_actor' => $named,
+            'secondary_actor' => '',
+            'target' => '',
+            'confidence' => 80,
+            'reason' => 'named-actor',
+            'actor_matches' => [$named],
+        ];
+    }
+    
+    return [
+        'primary_actor' => 'فاعل غير محسوم',
+        'secondary_actor' => '',
+        'target' => '',
+        'confidence' => 30,
+        'reason' => 'no-match',
+        'actor_matches' => [],
+    ];
+}
+
+/**
+ * استخراج قيمة من البنوك - نسخة مستقلة
+ */
+function sod_resolve_field_standalone(string $text, string $bank): string {
+    if (!function_exists('sod_get_all_banks')) return '';
+    
+    $banks = sod_get_all_banks();
+    if (!isset($banks[$bank]) || !is_array($banks[$bank])) return '';
+    
+    $best = '';
+    $best_len = 0;
+    foreach ($banks[$bank] as $value) {
+        if (!is_string($value) || $value === '') continue;
+        if (mb_stripos($text, $value) !== false && mb_strlen($value) > $best_len) {
+            $best = $value;
+            $best_len = mb_strlen($value);
+        }
+    }
+    
+    return $best;
+}
+
+/**
+ * حساب المستوى التكتيكي
+ */
+function sod_calculate_tactical_level(string $actor, string $intel_type, string $mode): string {
+    if ($mode === 'kinetic' && in_array($actor, ['جيش العدو الإسرائيلي', 'المقاومة الإسلامية (حزب الله)', 'كتائب القسام (حماس)'])) {
+        return 'عملياتي';
+    }
+    if ($intel_type === 'سياسي' || $intel_type === 'بيان') {
+        return 'استراتيجي';
+    }
+    return 'تكتيكي';
+}
+
+/**
+ * حساب النتيجة - نسخة مبسطة
+ */
+function sod_calculate_score_standalone(string $title, string $actor, string $intel_type, string $mode): int {
+    $base = 50;
+    
+    if ($mode === 'kinetic') $base += 40;
+    elseif ($mode === 'defensive_alert') $base += 20;
+    
+    if (in_array($actor, ['جيش العدو الإسرائيلي', 'المقاومة الإسلامية (حزب الله)', 'كتائب القسام (حماس)'])) {
+        $base += 30;
+    }
+    
+    if ($intel_type === 'عسكري/أمني') $base += 25;
+    elseif ($intel_type === 'سياسي' || $intel_type === 'بيان') $base -= 20;
+    
+    return min(220, max(0, $base));
+}
+
 function sod_context_memory_infer(string $text): array {
     $text = so_clean_text($text);
     if ($text === '') return [];

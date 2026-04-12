@@ -275,6 +275,8 @@ function sod_ajax_newslog_reclassify(): void {
     $reclassify_row = function(array $row) use ($wpdb, $table) {
         $item = ['title'=>(string)($row['title'] ?? ''),'link'=>(string)($row['link'] ?? ''),'source'=>(string)($row['source_name'] ?? $row['source'] ?? ''),'color'=>(string)($row['source_color'] ?? '#1da1f2'),'date'=>(string)($row['event_timestamp'] ?? ''),'agency_loc'=>(string)($row['agency_loc'] ?? ''),'image_url'=>(string)($row['image_url'] ?? '')];
         $manual_state = sod_get_manual_override_state($row);
+        
+        // التحقق من القفل اليدوي أولاً
         if (!empty($manual_state['enabled'])) {
             $locked_actor = (string)($row['actor_v2'] ?? 'فاعل غير محسوم');
             $locked_region = (string)($row['region'] ?? 'غير محدد');
@@ -284,35 +286,140 @@ function sod_ajax_newslog_reclassify(): void {
             sod_db_safe_update($table, $update_payload, ['id'=>(int)$row['id']]);
             return ['ok'=>true,'new_score'=>$locked_score,'new_actor'=>$locked_actor,'new_region'=>$locked_region,'locked'=>true];
         }
-        $analyzed = SO_OSINT_Engine::process_event($item);
-        if (!$analyzed || !is_array($analyzed)) return ['ok'=>false,'error'=>'classification failed'];
-        $analyzed = SO_Manual_Learning::apply_to_analyzed($item, $analyzed);
+        
+        // محاولة استخدام SO_OSINT_Engine::process_event إذا كان متاحراً
+        $analyzed = null;
+        $classification_error = null;
+        
+        try {
+            if (class_exists('SO_OSINT_Engine')) {
+                $analyzed = SO_OSINT_Engine::process_event($item);
+            }
+        } catch (Throwable $e) {
+            $classification_error = $e->getMessage();
+        }
+        
+        // إذا فشل التصنيف الرئيسي، نستخدم الدالة البديلة
+        if (!$analyzed || !is_array($analyzed)) {
+            $analyzed = sod_classify_article_complete(
+                (string)($item['title'] ?? ''),
+                '',
+                (string)($item['source'] ?? '')
+            );
+            
+            if (isset($analyzed['error']) && $analyzed['error'] === 'empty_text') {
+                return ['ok'=>false,'error'=>'classification failed: empty title'];
+            }
+            
+            // تحويل النتيجة إلى الصيغة المتوقعة
+            $analyzed = [
+                'title' => (string)($item['title'] ?? ''),
+                'link' => (string)($item['link'] ?? ''),
+                'source_name' => (string)($item['source'] ?? ''),
+                'source_color' => (string)($item['color'] ?? '#1da1f2'),
+                'event_timestamp' => (int)($item['date'] ?? time()),
+                'region' => (string)($analyzed['region'] ?? 'غير محدد'),
+                'actor_v2' => (string)($analyzed['actor_v2'] ?? 'فاعل غير محسوم'),
+                'score' => (int)($analyzed['score'] ?? 50),
+                'tactical_level' => (string)($analyzed['tactical_level'] ?? 'تكتيكي'),
+                'target_v2' => (string)($analyzed['target_v2'] ?? ''),
+                'context_actor' => (string)($analyzed['context_actor'] ?? ''),
+                'intent' => (string)($analyzed['intent'] ?? ''),
+                'weapon_v2' => (string)($analyzed['weapon_v2'] ?? ''),
+                'intel_type' => (string)($analyzed['intel_type'] ?? 'عام'),
+                'war_data' => wp_json_encode([
+                    'actor' => (string)($analyzed['actor_v2'] ?? ''),
+                    'region' => (string)($analyzed['region'] ?? ''),
+                    'intel_type' => (string)($analyzed['intel_type'] ?? ''),
+                    'early_warning' => sod_early_warning_ai((string)($item['title'] ?? ''), [
+                        'actor' => (string)($analyzed['actor_v2'] ?? ''),
+                        'region' => (string)($analyzed['region'] ?? ''),
+                        'intel_type' => (string)($analyzed['intel_type'] ?? ''),
+                    ]),
+                ], JSON_UNESCAPED_UNICODE),
+                'field_data' => wp_json_encode([
+                    'confidence' => (int)($analyzed['_ai_v2']['confidence'] ?? 20),
+                    'reason' => (string)($analyzed['_ai_v2']['reason'] ?? ''),
+                ], JSON_UNESCAPED_UNICODE),
+            ];
+        } else {
+            // تطبيق التعلم اليدوي إذا وجد
+            if (class_exists('SO_Manual_Learning')) {
+                $analyzed = SO_Manual_Learning::apply_to_analyzed($item, $analyzed);
+            }
+        }
+        
         $analyzed = sod_apply_manual_override_to_analyzed($analyzed, $row);
-        if (empty(sod_get_manual_override_state($row)['fields']['actor_v2'])) $analyzed['actor_v2'] = sod_force_requested_actor_rule((string)($analyzed['actor_v2'] ?? ''), (string)($analyzed['region'] ?? ''), (string)($item['title'] ?? ''));
+        if (empty(sod_get_manual_override_state($row)['fields']['actor_v2'])) {
+            $analyzed['actor_v2'] = sod_force_requested_actor_rule((string)($analyzed['actor_v2'] ?? ''), (string)($analyzed['region'] ?? ''), (string)($item['title'] ?? ''));
+        }
+        
         $wd = [];
-        if (!empty($analyzed['war_data'])) { $tmp = json_decode($analyzed['war_data'], true); if (is_array($tmp)) $wd = $tmp; }
+        if (!empty($analyzed['war_data'])) { 
+            $tmp = json_decode($analyzed['war_data'], true); 
+            if (is_array($tmp)) $wd = $tmp; 
+        }
         $wd['actor'] = $analyzed['actor_v2'];
         if (!isset($wd['target']) && !empty($analyzed['target_v2'])) $wd['target'] = $analyzed['target_v2'];
         if (!isset($wd['context_actor']) && !empty($analyzed['context_actor'])) $wd['context_actor'] = $analyzed['context_actor'];
         if (!isset($wd['intent']) && !empty($analyzed['intent'])) $wd['intent'] = $analyzed['intent'];
-        if (!isset($wd['early_warning'])) $wd['early_warning'] = sod_early_warning_ai((string)($item['title'] ?? ''), ['actor'=>(string)($analyzed['actor_v2'] ?? ''),'region'=>(string)($analyzed['region'] ?? ''),'intel_type'=>(string)($analyzed['intel_type'] ?? '')]);
+        if (!isset($wd['early_warning'])) {
+            $wd['early_warning'] = sod_early_warning_ai((string)($item['title'] ?? ''), [
+                'actor'=>(string)($analyzed['actor_v2'] ?? ''),
+                'region'=>(string)($analyzed['region'] ?? ''),
+                'intel_type'=>(string)($analyzed['intel_type'] ?? '')
+            ]);
+        }
         $analyzed['war_data'] = wp_json_encode($wd, JSON_UNESCAPED_UNICODE);
+        
         $target_v2 = (string)($wd['target'] ?? '');
         $context_actor = (string)($wd['context_actor'] ?? '');
         $intent = (string)($wd['intent'] ?? '');
         $weapon_v2 = (string)($wd['weapon_means'] ?? '');
+        
         $manual_state = sod_get_manual_override_state($row);
-        $update_payload = ['intel_type'=>(string)($analyzed['intel_type'] ?? ''),'tactical_level'=>(string)($analyzed['tactical_level'] ?? ''),'region'=>(string)($analyzed['region'] ?? ''),'actor_v2'=>(string)($analyzed['actor_v2'] ?? ''),'score'=>(int)($analyzed['score'] ?? 0),'war_data'=>(string)($analyzed['war_data'] ?? '{}'),'field_data'=>(string)($analyzed['field_data'] ?? '{}'),'target_v2'=>$target_v2,'context_actor'=>$context_actor,'intent'=>$intent,'weapon_v2'=>$weapon_v2];
+        $update_payload = [
+            'intel_type'=>(string)($analyzed['intel_type'] ?? ''),
+            'tactical_level'=>(string)($analyzed['tactical_level'] ?? ''),
+            'region'=>(string)($analyzed['region'] ?? ''),
+            'actor_v2'=>(string)($analyzed['actor_v2'] ?? ''),
+            'score'=>(int)($analyzed['score'] ?? 0),
+            'war_data'=>(string)($analyzed['war_data'] ?? '{}'),
+            'field_data'=>(string)($analyzed['field_data'] ?? '{}'),
+            'target_v2'=>$target_v2,
+            'context_actor'=>$context_actor,
+            'intent'=>$intent,
+            'weapon_v2'=>$weapon_v2
+        ];
         $update_payload = sod_mark_evaluation_state($row, $update_payload, !empty($manual_state['enabled']) ? 'manual_override' : 'auto');
+        
         $res = sod_db_safe_update($table, $update_payload, ['id'=>(int)$row['id']]);
         if (empty($res['ok'])) {
-            sod_db_log_error('newslog_reclassify', (string)($res['error'] ?? 'unknown'), ['table'=>$table,'id'=>(int)$row['id'],'target_v2'=>$target_v2,'context_actor'=>$context_actor,'intent'=>$intent,'weapon_v2'=>$weapon_v2]);
+            sod_db_log_error('newslog_reclassify', (string)($res['error'] ?? 'unknown'), [
+                'table'=>$table,
+                'id'=>(int)$row['id'],
+                'target_v2'=>$target_v2,
+                'context_actor'=>$context_actor,
+                'intent'=>$intent,
+                'weapon_v2'=>$weapon_v2
+            ]);
             return ['ok'=>false,'error'=>'db update failed: ' . (string)($res['error'] ?? 'unknown')];
         }
-        foreach ([['types',(string)($analyzed['intel_type'] ?? '')],['levels',(string)($analyzed['tactical_level'] ?? '')],['regions',(string)($analyzed['region'] ?? '')],['actors',(string)($analyzed['actor_v2'] ?? '')],['targets',$target_v2],['contexts',$context_actor],['intents',$intent],['weapons',$weapon_v2]] as $pair) {
+        
+        foreach ([
+            ['types',(string)($analyzed['intel_type'] ?? '')],
+            ['levels',(string)($analyzed['tactical_level'] ?? '')],
+            ['regions',(string)($analyzed['region'] ?? '')],
+            ['actors',(string)($analyzed['actor_v2'] ?? '')],
+            ['targets',$target_v2],
+            ['contexts',$context_actor],
+            ['intents',$intent],
+            ['weapons',$weapon_v2]
+        ] as $pair) {
             [$bk,$val] = $pair;
             if ($val !== '') sod_add_bank_value($bk, $val);
         }
+        
         return ['ok'=>true,'new_score'=>(int)($analyzed['score'] ?? 0),'new_actor'=>(string)($analyzed['actor_v2'] ?? ''),'new_region'=>(string)($analyzed['region'] ?? '')];
     };
 
