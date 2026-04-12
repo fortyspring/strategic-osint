@@ -16,6 +16,9 @@ if (!defined('ABSPATH')) exit;
 
 $sod_inc_base = __DIR__ . '/includes';
 if (is_dir($sod_inc_base)) {
+    // تحميل السمة أولاً لتجنب خطأ "Trait not found"
+    require_once $sod_inc_base . '/trait-singleton.php';
+    
     require_once $sod_inc_base . '/classifier-service.php';
     require_once $sod_inc_base . '/newslog-service.php';
 }
