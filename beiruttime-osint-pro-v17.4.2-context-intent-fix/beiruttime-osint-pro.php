@@ -5180,7 +5180,8 @@ function sod_available_dashboard_panels(): array {
 
 function sod_dashboard_selected_panels(): array {
     $available = sod_available_dashboard_panels();
-    $allowed = ['powerbi','ticker','threat_analyzer'];
+    // السماح بجميع اللوحات المتاحة بدلاً من حصرها في 3 فقط
+    $allowed = array_keys($available);
     $selected = get_option('sod_dashboard_selected_panels', ['powerbi','ticker','threat_analyzer']);
     if (!is_array($selected)) $selected = ['powerbi','ticker','threat_analyzer'];
     $selected = array_values(array_filter(array_map('sanitize_key', $selected), function($key) use ($available){
