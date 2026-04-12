@@ -11,11 +11,6 @@ namespace Beiruttime\OSINT\Admin;
 
 use Beiruttime\OSINT\Traits\Singleton;
 
-// تعريف الثابت إذا لم يكن معرفاً
-if (!defined('BEIRUTTIME_OSINT_PRO_PLUGIN_DIR')) {
-    define('BEIRUTTIME_OSINT_PRO_PLUGIN_DIR', plugin_dir_path(dirname(__DIR__, 2)) . '/');
-}
-
 /**
  * فئة AdminMenu
  */
@@ -29,7 +24,9 @@ class AdminMenu {
     private function __construct() {
         add_action('admin_menu', [$this, 'add_admin_menu']);
         add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
-        add_action('wp_ajax_beiruttime_full_reanalysis', [$this, 'handle_full_reanalysis']);
+        // AJAX handlers لإعادة التحليل
+        add_action('wp_ajax_so_ajax_reanalyze_batch', [$this, 'handle_full_reanalysis']);
+        add_action('wp_ajax_so_ajax_reanalyze_reset', [$this, 'handle_reanalyze_reset']);
         add_action('wp_ajax_beiruttime_get_stats', [$this, 'handle_get_stats']);
     }
     
@@ -130,6 +127,40 @@ class AdminMenu {
                 <p><?php echo esc_html__('أدوات إعادة التحليل والتصنيف الشامل', 'beiruttime-osint'); ?></p>
             </div>
             
+            <!-- نموذج إعادة التحليل المتوافق مع JavaScript -->
+            <div class="card" style="max-width: 800px; margin-bottom: 20px;">
+                <h2><?php echo esc_html__('إعادة التحليل الكامل', 'beiruttime-osint'); ?></h2>
+                <p><?php echo esc_html__('إعادة تصنيف جميع الأخبار باستخدام خوارزميات الذكاء الاصطناعي المحدثة', 'beiruttime-osint'); ?></p>
+                
+                <div style="margin: 20px 0;">
+                    <label for="so-re-batch"><?php echo esc_html__('حجم الدفعة:', 'beiruttime-osint'); ?></label>
+                    <input type="number" id="so-re-batch" value="100" min="10" max="1000" step="50" style="width: 80px; margin: 0 10px;">
+                    
+                    <button id="so-re-run" class="button button-primary">
+                        <?php echo esc_html__('🚀 بدء إعادة التحليل (AJAX)', 'beiruttime-osint'); ?>
+                    </button>
+                    <button id="so-re-reset" class="button button-secondary">
+                        <?php echo esc_html__('تصفير المؤشر', 'beiruttime-osint'); ?>
+                    </button>
+                </div>
+                
+                <div id="so-re-msg" style="margin: 10px 0; padding: 10px; background: #f0f0f1; border-radius: 4px;"></div>
+                
+                <div style="margin: 15px 0;">
+                    <div style="background: #ddd; height: 20px; border-radius: 3px; overflow: hidden;">
+                        <div id="so-re-bar" style="width: 0%; height: 100%; background: #0073aa; transition: width 0.3s;"></div>
+                    </div>
+                    <div style="margin-top: 5px;">
+                        <span id="so-re-percent">0%</span> - 
+                        <?php echo esc_html__('تمت المعالجة:', 'beiruttime-osint'); ?> <span id="so-re-processed">0</span> / 
+                        <span id="so-re-total">0</span> |
+                        <?php echo esc_html__('المُحدّثة:', 'beiruttime-osint'); ?> <span id="so-re-updated">0</span> |
+                        <?php echo esc_html__('الدفعة:', 'beiruttime-osint'); ?> <span id="so-re-batch-view">100</span> |
+                        <?php echo esc_html__('الحالة:', 'beiruttime-osint'); ?> <span id="so-re-status"><?php echo esc_html__('متوقف', 'beiruttime-osint'); ?></span>
+                    </div>
+                </div>
+            </div>
+            
             <table class="wp-list-table widefat fixed striped">
                 <thead>
                     <tr>
@@ -139,16 +170,6 @@ class AdminMenu {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td><?php echo esc_html__('إعادة التحليل الكامل', 'beiruttime-osint'); ?></td>
-                        <td><?php echo esc_html__('إعادة تصنيف جميع الأخبار باستخدام خوارزميات الذكاء الاصطناعي المحدثة', 'beiruttime-osint'); ?></td>
-                        <td>
-                            <button id="reanalyze-all-btn" class="button button-primary">
-                                <?php echo esc_html__('🚀 بدء إعادة التحليل (AJAX)', 'beiruttime-osint'); ?>
-                            </button>
-                            <span id="reanalyze-status" style="margin-left: 10px;"></span>
-                        </td>
-                    </tr>
                     <tr>
                         <td><?php echo esc_html__('تحديث مصفوفات الجهات', 'beiruttime-osint'); ?></td>
                         <td><?php echo esc_html__('تحديث قائمة الجهات الفاعلة من الملفات المعيارية', 'beiruttime-osint'); ?></td>
@@ -160,79 +181,10 @@ class AdminMenu {
                     </tr>
                 </tbody>
             </table>
-            
-            <div id="reanalyze-progress" style="margin-top: 20px; display: none;">
-                <progress id="reanalyze-progress-bar" value="0" max="100"></progress>
-                <span id="reanalyze-progress-text">0%</span>
-            </div>
-            
-            <div id="reanalyze-log" style="margin-top: 20px; background: #f0f0f1; padding: 15px; border-radius: 4px; max-height: 400px; overflow-y: auto; display: none;">
-                <strong><?php echo esc_html__('سجل العمليات:', 'beiruttime-osint'); ?></strong>
-                <div id="log-content"></div>
-            </div>
         </div>
         
         <script>
         jQuery(document).ready(function($) {
-            $('#reanalyze-all-btn').on('click', function() {
-                if (!confirm('<?php echo esc_js(__('هل أنت متأكد من بدء إعادة التحليل الكامل؟ قد تستغرق هذه العملية وقتًا طويلاً.', 'beiruttime-osint')); ?>')) {
-                    return;
-                }
-                
-                var $btn = $(this);
-                var $status = $('#reanalyze-status');
-                var $progress = $('#reanalyze-progress');
-                var $progressBar = $('#reanalyze-progress-bar');
-                var $progressText = $('#reanalyze-progress-text');
-                var $log = $('#reanalyze-log');
-                var $logContent = $('#log-content');
-                
-                $btn.prop('disabled', true);
-                $progress.show();
-                $log.show();
-                $logContent.html('');
-                
-                function addLog(message) {
-                    $logContent.append('<div>' + message + '</div>');
-                    $log[0].scrollTop = $log[0].scrollHeight;
-                }
-                
-                $.ajax({
-                    url: ajaxurl,
-                    type: 'POST',
-                    data: {
-                        action: 'so_reanalyze_all',
-                        nonce: '<?php echo wp_create_nonce('so_reanalyze_action'); ?>'
-                    },
-                    xhrFields: {
-                        onprogress: function(e) {
-                            if (e.lengthComputable) {
-                                var percent = Math.round((e.loaded / e.total) * 100);
-                                $progressBar.val(percent);
-                                $progressText.text(percent + '%');
-                            }
-                        }
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            addLog('<strong style="color: green;">✓ ' + response.data.message + '</strong>');
-                            $status.html('<span style="color: green;">' + response.data.message + '</span>');
-                        } else {
-                            addLog('<strong style="color: red;">✗ ' + response.data + '</strong>');
-                            $status.html('<span style="color: red;">' + response.data + '</span>');
-                        }
-                        $btn.prop('disabled', false);
-                    },
-                    error: function(xhr, status, error) {
-                        addLog('<strong style="color: red;">✗ خطأ: ' + error + '</strong>');
-                        $status.html('<span style="color: red;">خطأ في الاتصال</span>');
-                        $btn.prop('disabled', false);
-                    }
-                });
-                
-                addLog('بدء عملية إعادة التحليل...');
-            });
-            
             $('#update-actors-btn').on('click', function() {
                 alert('<?php echo esc_js(__('سيتم تحديث مصفوفات الجهات قريبًا', 'beiruttime-osint')); ?>');
             });
@@ -346,7 +298,7 @@ class AdminMenu {
      * معالجة إعادة التحليل الكامل (AJAX)
      */
     public function handle_full_reanalysis() {
-        check_ajax_referer('beiruttime-osint-nonce', 'nonce');
+        check_ajax_referer('so_reanalyze_action', 'nonce');
         
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['message' => 'غير مصرح']);
@@ -459,12 +411,40 @@ class AdminMenu {
      */
     public function enqueue_admin_assets($hook) {
         // تحميل assets فقط في صفحات الإضافة
-        if (strpos($hook, 'beiruttime-osint') === false && strpos($hook, 'strategic-osint') === false) {
+        if (strpos($hook, 'beiruttime-osint') === false && strpos($hook, 'strategic-osint') === false && strpos($hook, 'osint-') === false) {
             return;
         }
         
-        wp_enqueue_style('wp-color-picker');
+        // تحميل ملفات CSS
+        wp_enqueue_style(
+            'beiruttime-osint-admin',
+            BEIRUTTIME_OSINT_PRO_PLUGIN_URL . 'assets/css/admin-pages.css',
+            ['wp-color-picker'],
+            BEIRUTTIME_OSINT_PRO_VERSION
+        );
+        
+        // تحميل ملفات JS
+        wp_enqueue_script(
+            'beiruttime-osint-db-admin',
+            BEIRUTTIME_OSINT_PRO_PLUGIN_URL . 'assets/js/db-admin.js',
+            ['jquery', 'wp-color-picker'],
+            BEIRUTTIME_OSINT_PRO_VERSION,
+            true
+        );
+        
         wp_enqueue_script('wp-color-picker');
         wp_enqueue_media();
+        
+        // تمرير المتغيرات إلى JavaScript
+        wp_localize_script('beiruttime-osint-db-admin', 'beiruttimeOsint', [
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('so_reanalyze_action'),
+            'strings' => [
+                'confirmReanalysis' => __('هل أنت متأكد من بدء إعادة التحليل الكامل؟ قد تستغرق هذه العملية وقتًا طويلاً.', 'beiruttime-osint'),
+                'processing' => __('جاري المعالجة...', 'beiruttime-osint'),
+                'completed' => __('اكتمل!', 'beiruttime-osint'),
+                'error' => __('حدث خطأ', 'beiruttime-osint')
+            ]
+        ]);
     }
 }
