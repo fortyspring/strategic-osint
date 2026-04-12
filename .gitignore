@@ -1,109 +1,56 @@
-```
-# Environment
-.env
-.env.local
-.env.*
-
-# Dependencies
-vendor/
-
-# Logs
-*.log
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# Editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Build artifacts
-dist/
-build/
-target/
+```gitignore
+# Compiled and binary files
+*.pyc
+*.class
 *.o
-*.obj
-*.out
 *.exe
 *.dll
 *.so
 *.a
-
-# Python specific
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.egg-info/
-.eggs/
-
-# Node.js specific
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Java specific
-*.class
-*.jar
-*.war
-*.ear
-.META-INF/
-
-# C/C++ specific
-*.a
-*.lib
 *.obj
-*.o
-*.so
-*.dylib
+*.out
 
-# Go specific
-*.exe
-*.test
-*.prof
-*.syso
+# Dependencies
+node_modules/
+venv/
+.venv/
+__pycache__/
+dist/
+build/
+.mypy_cache/
+.pytest_cache/
+target/
+.gradle/
 
-# Ruby specific
-*.gem
-*.rbc
-.bundle/
-.coverage/
-.ruby-version
+# Editors/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
 
-# Coverage reports
+# System/Environment
+.DS_Store
+Thumbs.db
+.env
+.env.local
+*.env.*
+
+# Logs and coverage
+*.log
 coverage/
 htmlcov/
 .coverage
-*.coveragerc
 
-# Testing
-.rspec
-spec/reports/
-test/tmp/
-test/fixtures/*.valid_after_
-*.junit.xml
-
-# Temporary folders
-tmp/
-temp/
-.DS_Store?
-._*
-
-# Archives
+# Compressed files
 *.zip
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.7z
-*.rar
 *.gz
+*.tar
+*.tgz
 *.bz2
 *.xz
+*.7z
+*.rar
 *.zst
 *.lz4
 *.lzh
@@ -114,156 +61,8 @@ temp/
 *.Z
 *.lz
 *.lzo
-
-# Cache directories
-.cache/
-.cargo/
-.go/
-.hugo_build.lock
-.jekyll-cache/
-.sass-cache/
-.yarn/
-.pnp.*
-.yarn-state.yml
-.yarn-metadata.json
-.vitepress/cache/
-.nuxt/
-.next/
-.vercel/
-.output/
-
-# IDE specific
-.vs/
-.vsc/
-.atom/
-.brackets/
-.netbeans/
-.project/
-.settings/
-*.sublime-project
-*.sublime-workspace
-
-# Database
-*.db
-*.db-journal
-*.sqlite
-*.sqlite3
-
-# Configuration
-config/secrets.yml
-config/credentials.yml.enc
-
-# Docker
-.dockerenv
-Dockerfile*
-docker-compose*
-
-# PHP specific
-composer.lock
-vendor/
-
-# Generated documentation
-docs/_build/
-docs/build/
-
-# Vim
-*.un~
-Session.vim
-.netrwhist
-
-# Emacs
-*~
-\#*\#
-/.emacs.desktop
-/.emacs.desktop.lock
-*.elc
-auto-save-list
-tramp
-.\#*
-
-# Eclipse
-.metadata
-bin/
-tmp/
-*.tmp
-*.bak
-*.swp
-*~.nib
-local.properties
-.settings/
-.loadpath
-.recommenders
-
-# IntelliJ IDEA
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# NetBeans
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-
-# Visual Studio
-.vs/
-*.VC.db
-*.VC.VC.opendb
-
-# Xcode
-*.xcodeproj
-*.xcworkspace
-*.pbxuser
-*.mode1v3
-*.perspectivev3
-*.xccheckout
-*.moved-aside
-*.xcuserstate
-.xcprojectdata
-
-# Android Studio
-*.iml
-.gradle/
-local.properties
-.pro
-.cxx/
-.externalNativeBuild/
-.cmake/
-
-# Qt Creator
-*.pro.user
-*.pro.user.*
-*.qbs.user
-*.qbs.user.*
-*.moc
-*.moc.cpp
-*.qm
-*.prl
-*.pri
-
-# CodeLite
-*.project
-*.workspace
-*.user
-*.session
-
-# Sublime Text
-*.sublime-workspace
-*.sublime-project
-
-# JetBrains
-*.iws
-*.iml
-*.ipr
-.idea/
-
-# Vim
-[._]*.s[a-w][a-z]
-[._]s[a-w][a-z]
-*.un~
-Session.vim
-.netrwhist
-*~
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
