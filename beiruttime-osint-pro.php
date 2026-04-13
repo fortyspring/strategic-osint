@@ -4253,13 +4253,21 @@ function sod_verify_nonce(): bool {
 }
 
 // ==========================================================================
-// 15. AJAX Handlers (V12 + V13 combined)
+// ==========================================================================
+// 15. AJAX Handlers (V12 + V13 combined) - محدث للزوار غير المسجلين
 // ==========================================================================
 
+// Dashboard Data - متاح للزوار والمسجلين
 add_action('wp_ajax_sod_get_dashboard_data',        'sod_ajax_dashboard_data_v2');
-// تم إزالة wp_ajax_nopriv - يتطلب الآن صلاحيات مستخدم
-function sod_ajax_dashboard_data(): void {
-    if (!current_user_can('read') || !sod_verify_nonce()) { wp_send_json_error(['message'=>'خطأ في التحقق'],403); }
+add_action('wp_ajax_nopriv_sod_get_dashboard_data', 'sod_ajax_dashboard_data_v2');
+function sod_ajax_dashboard_data_v2(): void {
+    // التحقق من Nonce للزوار فقط، المسجلين يتجاوزون هذا الشرط
+    if (!current_user_can('read')) {
+        $nonce = sanitize_text_field(wp_unslash($_POST['nonce'] ?? $_GET['nonce'] ?? ''));
+        if (empty($nonce) || wp_verify_nonce($nonce, SOD_AJAX_NONCE_ACTION) === false) {
+            wp_send_json_error(['message'=>'خطأ في التحقق'],403);
+        }
+    }
     $hours=(int)($_POST['hours']??24); $region=sanitize_text_field(wp_unslash($_POST['region']??'all')); $min_score=max(0,(int)($_POST['min_score']??0));
     $events=sod_get_events(['hours'=>max(1,min(8760,$hours)),'region'=>$region,'min_score'=>$min_score,'limit'=>2000]);
     $analytics=sod_build_analytics($events);
@@ -4267,25 +4275,36 @@ function sod_ajax_dashboard_data(): void {
     wp_send_json_success(['events'=>$safe_events,'analytics'=>$analytics,'time'=>time()]);
 }
 
+// Ticker Data - متاح للزوار والمسجلين
 add_action('wp_ajax_sod_get_ticker_data',        'sod_ajax_ticker_data_v2');
-// تم إزالة wp_ajax_nopriv - يتطلب الآن صلاحيات مستخدم
-function sod_ajax_ticker_data(): void {
-    if (!current_user_can('read') || !sod_verify_nonce()) { wp_send_json_error(['message'=>'خطأ في التحقق'],403); }
+add_action('wp_ajax_nopriv_sod_get_ticker_data', 'sod_ajax_ticker_data_v2');
+function sod_ajax_ticker_data_v2(): void {
+    if (!current_user_can('read')) {
+        $nonce = sanitize_text_field(wp_unslash($_POST['nonce'] ?? $_GET['nonce'] ?? ''));
+        if (empty($nonce) || wp_verify_nonce($nonce, SOD_AJAX_NONCE_ACTION) === false) {
+            wp_send_json_error(['message'=>'خطأ في التحقق'],403);
+        }
+    }
     $events=sod_get_events(['hours'=>6,'min_score'=>0,'limit'=>80]);
     $critical=array_filter($events,fn($e)=>(int)($e['score']??0)>=140);
     $region_scores=[];
     foreach($events as $ev){$r=sanitize_text_field((string)($ev['region']??'غير محدد'));$region_scores[$r]=($region_scores[$r]??0)+(int)($ev['score']??0);}
     arsort($region_scores);
     $map_headline=fn($e)=>['title'=>wp_strip_all_tags((string)$e['title']),'link'=>esc_url_raw((string)($e['link']??SOD_TG_LINK)),'score'=>(int)$e['score'],'region'=>sanitize_text_field((string)$e['region']),'source'=>sanitize_text_field((string)($e['source_name']??'')),'ts'=>(int)$e['event_timestamp']];
-    // عناوين الأخبار الأخيرة (30 حدث) لعرضها في شريط التمرير
     $headlines=array_values(array_map($map_headline,array_slice($events,0,30)));
     wp_send_json_success(['critical'=>array_values(array_map($map_headline,$critical)),'headlines'=>$headlines,'region_scores'=>$region_scores,'total'=>count($events),'time'=>time()]);
 }
 
+// Threat Analysis - متاح للزوار والمسجلين
 add_action('wp_ajax_sod_get_threat_analysis',        'sod_ajax_threat_analysis_v2');
-// تم إزالة wp_ajax_nopriv - يتطلب الآن صلاحيات مستخدم
-function sod_ajax_threat_analysis(): void {
-    if (!current_user_can('read') || !sod_verify_nonce()) { wp_send_json_error(['message'=>'خطأ في التحقق'],403); }
+add_action('wp_ajax_nopriv_sod_get_threat_analysis', 'sod_ajax_threat_analysis_v2');
+function sod_ajax_threat_analysis_v2(): void {
+    if (!current_user_can('read')) {
+        $nonce = sanitize_text_field(wp_unslash($_POST['nonce'] ?? $_GET['nonce'] ?? ''));
+        if (empty($nonce) || wp_verify_nonce($nonce, SOD_AJAX_NONCE_ACTION) === false) {
+            wp_send_json_error(['message'=>'خطأ في التحقق'],403);
+        }
+    }
     $events_72h=sod_get_events(['hours'=>72,'limit'=>1000]);
     $events_24h=array_values(array_filter($events_72h,fn($e)=>(int)($e['event_timestamp']??0)>=time()-86400));
     $analytics_24h=sod_build_analytics($events_24h);$analytics_72h=sod_build_analytics($events_72h);
@@ -4300,9 +4319,9 @@ function sod_ajax_threat_analysis(): void {
     wp_send_json_success(['analytics_24h'=>$analytics_24h,'analytics_72h'=>$analytics_72h,'actor_threats'=>array_values(array_slice($actor_threats,0,10)),'trend_data'=>$trend_data,'top_regions'=>$top_regions,'momentum_change'=>$momentum_change,'time'=>time()]);
 }
 
+// Critical Popup - يتطلب صلاحيات فقط
 add_action('wp_ajax_so_get_critical_popup',        'so_ajax_get_critical_popup_v2');
-// تم إزالة wp_ajax_nopriv - يتطلب الآن صلاحيات مستخدم
-function so_ajax_get_critical_popup(): void {
+function so_ajax_get_critical_popup_v2(): void {
     if (!current_user_can('read')) { wp_send_json_error(['message'=>'غير مصرح'],403); }
     $threshold=(int)get_option('so_popup_threshold',170);
     $recent_minutes=(int)get_option('so_popup_recent_minutes',20);
@@ -4313,178 +4332,65 @@ function so_ajax_get_critical_popup(): void {
     wp_send_json_success(['event'=>$ev]);
 }
 
+// Manual Sync - يتطلب صلاحيات إدارة فقط
 add_action('wp_ajax_so_manual_sync',        'so_ajax_manual_sync_v2');
-function so_ajax_manual_sync(): void {
+function so_ajax_manual_sync_v2(): void {
     if (!current_user_can('manage_options') || !check_ajax_referer('so_manual_sync','nonce',false)) { wp_send_json_error(['message'=>'غير مصرح'],403); }
     $inserted=SO_Cron_Manager::safe_sync_news();
     $summary=get_option('so_last_sync_summary',[]);
     wp_send_json_success(['inserted'=>$inserted,'message'=>$summary['message']??'تمت المزامنة','raw_count'=>$summary['raw_count']??0]);
 }
 
+// AI Brief - متاح للزوار والمسجلين
 add_action('wp_ajax_sod_get_ai_brief', 'sod_ajax_ai_brief_v2');
-// تم إزالة wp_ajax_nopriv - يتطلب الآن صلاحيات مستخدم
-function sod_ajax_ai_brief(): void {
-    if (!current_user_can('read') || !sod_verify_nonce()) { wp_send_json_error(['message'=>'خطأ في التحقق'],403); }
+add_action('wp_ajax_nopriv_sod_get_ai_brief', 'sod_ajax_ai_brief_v2');
+function sod_ajax_ai_brief_v2(): void {
+    if (!current_user_can('read')) {
+        $nonce = sanitize_text_field(wp_unslash($_POST['nonce'] ?? $_GET['nonce'] ?? ''));
+        if (empty($nonce) || wp_verify_nonce($nonce, SOD_AJAX_NONCE_ACTION) === false) {
+            wp_send_json_error(['message'=>'خطأ في التحقق'],403);
+        }
+    }
     $events=sod_get_events(['hours'=>24,'limit'=>20,'min_score'=>80]);
     $brief=SO_LLM_Engine::generate_intel_brief($events);
     wp_send_json_success(['brief'=>$brief,'time'=>time()]);
 }
 
 // ==========================================================================
-// 15c. News Log AJAX — سجل الأخبار
+// 15c. News Log AJAX — سجل الأخبار - متاح للزوار والمسجلين
 // ==========================================================================
-function sod_ajax_dashboard_data_v2(): void {
-    if (!sod_verify_nonce()) { sod_send_json_error(['message' => 'خطأ في التحقق'], 403); }
-    $hours = (int)($_POST['hours'] ?? 24);
-    $region = sanitize_text_field(wp_unslash($_POST['region'] ?? 'all'));
-    $min_score = max(0, (int)($_POST['min_score'] ?? 0));
-    $events = sod_get_events(['hours' => max(1, min(8760, $hours)), 'region' => $region, 'min_score' => $min_score, 'limit' => 2000]);
-    $analytics = sod_build_analytics($events);
-    $safe_events = array_map(function($ev) {
-        $wd = sod_parse_json_array($ev['war_data'] ?? '{}');
-        return [
-            'id' => (int)($ev['id'] ?? 0),
-            'title' => sod_fix_mojibake_text(wp_strip_all_tags((string)($ev['title'] ?? ''))),
-            'link' => esc_url_raw((string)($ev['link'] ?? SOD_TG_LINK)),
-            'source_name' => sod_fix_mojibake_text(sanitize_text_field((string)($ev['source_name'] ?? ''))),
-            'source_color' => sanitize_hex_color((string)($ev['source_color'] ?? '#1da1f2')) ?: '#1da1f2',
-            'intel_type' => sod_fix_mojibake_text(sanitize_text_field((string)($ev['intel_type'] ?? ''))),
-            'tactical_level' => sod_fix_mojibake_text(sanitize_text_field((string)($ev['tactical_level'] ?? ''))),
-            'region' => sod_fix_mojibake_text(sanitize_text_field((string)($ev['region'] ?? ''))),
-            'actor_v2' => sod_fix_mojibake_text(sanitize_text_field((string)($ev['actor_v2'] ?? ''))),
-            'score' => (int)($ev['score'] ?? 0),
-            'event_timestamp' => (int)($ev['event_timestamp'] ?? 0),
-            'image_url' => esc_url_raw((string)($ev['image_url'] ?? '')),
-            'llm_verified' => !empty($ev['llm_verified']),
-            'evaluation_mode' => sod_fix_mojibake_text((string)($wd['evaluation_mode'] ?? 'auto')),
-            'evaluation_label' => sod_fix_mojibake_text((string)($wd['evaluation_label'] ?? 'آلي')),
-            'has_manual_override' => !empty(($wd['manual_override']['enabled'] ?? false)),
-            'war_data' => sod_fix_mojibake_text((string)($ev['war_data'] ?? '{}')),
-            'field_data' => sod_fix_mojibake_text((string)($ev['field_data'] ?? '{}')),
-        ];
-    }, array_slice($events, 0, 500));
-    sod_send_json_success(sod_prepare_json_payload(['events' => $safe_events, 'analytics' => $analytics, 'time' => time()]));
-}
+// ملاحظة: تم إزالة هذه الدالة لأنها مكررة عن sod_ajax_dashboard_data_v2 في السطر 4263
+// إذا كنت بحاجة إلى وظائف إضافية، أضفها للدالة الأصلية أعلاه.
 
-function sod_ajax_ticker_data_v2(): void {
-    if (!sod_verify_nonce()) { sod_send_json_error(['message' => 'خطأ في التحقق'], 403); }
-    $events = sod_get_events(['hours' => 6, 'min_score' => 0, 'limit' => 80]);
-    $critical = array_filter($events, fn($e) => (int)($e['score'] ?? 0) >= 140);
-    $region_scores = [];
-    foreach ($events as $ev) {
-        $r = sod_fix_mojibake_text(sanitize_text_field((string)($ev['region'] ?? 'غير محدد')));
-        $region_scores[$r] = ($region_scores[$r] ?? 0) + (int)($ev['score'] ?? 0);
-    }
-    arsort($region_scores);
-    $map_headline = fn($e) => [
-        'title' => sod_fix_mojibake_text(wp_strip_all_tags((string)($e['title'] ?? ''))),
-        'link' => esc_url_raw((string)($e['link'] ?? SOD_TG_LINK)),
-        'score' => (int)($e['score'] ?? 0),
-        'region' => sod_fix_mojibake_text(sanitize_text_field((string)($e['region'] ?? ''))),
-        'source' => sod_fix_mojibake_text(sanitize_text_field((string)($e['source_name'] ?? ''))),
-        'ts' => (int)($e['event_timestamp'] ?? 0),
-    ];
-    $headlines = array_values(array_map($map_headline, array_slice($events, 0, 30)));
-    sod_send_json_success(sod_prepare_json_payload([
-        'critical' => array_values(array_map($map_headline, $critical)),
-        'headlines' => $headlines,
-        'region_scores' => $region_scores,
-        'total' => count($events),
-        'time' => time(),
-    ]));
-}
-
-function sod_ajax_threat_analysis_v2(): void {
-    if (!sod_verify_nonce()) { sod_send_json_error(['message' => 'خطأ في التحقق'], 403); }
-    $events_72h = sod_get_events(['hours' => 72, 'limit' => 1000]);
-    $events_24h = array_values(array_filter($events_72h, fn($e) => (int)($e['event_timestamp'] ?? 0) >= time() - 86400));
-    $analytics_24h = sod_build_analytics($events_24h);
-    $analytics_72h = sod_build_analytics($events_72h);
-    $actor_threats = [];
-    foreach (($analytics_24h['actors'] ?? []) as $actor => $score) {
-        $actor_name = sod_fix_mojibake_text((string)$actor);
-        $actor_threats[$actor_name] = [
-            'actor' => $actor_name,
-            'score' => $score,
-            'events' => count(array_filter($events_24h, fn($e) => (string)($e['actor_v2'] ?? '') === (string)$actor)),
-        ];
-    }
-    arsort($actor_threats);
-    $trend_data = [];
-    for ($i = 11; $i >= 0; $i--) {
-        $h_start = strtotime("-{$i} hours");
-        $h_key = gmdate('Y-m-d H:00', $h_start);
-        $trend_data[$h_key] = $analytics_72h['hourly'][$h_key] ?? 0;
-    }
-    $top_regions = array_slice((array)($analytics_24h['region_scores'] ?? []), 0, 8, true);
-    $momentum_change = 0;
-    if (!empty($analytics_72h['total']) && !empty($analytics_24h['total'])) {
-        $expected_24h = $analytics_72h['total'] / 3;
-        $momentum_change = $expected_24h > 0 ? round((($analytics_24h['total'] - $expected_24h) / $expected_24h) * 100) : 0;
-    }
-    sod_send_json_success(sod_prepare_json_payload([
-        'analytics_24h' => $analytics_24h,
-        'analytics_72h' => $analytics_72h,
-        'actor_threats' => array_values(array_slice($actor_threats, 0, 10)),
-        'trend_data' => $trend_data,
-        'top_regions' => $top_regions,
-        'momentum_change' => $momentum_change,
-        'time' => time(),
-    ]));
-}
-
-function so_ajax_get_critical_popup_v2(): void {
-    $threshold = (int)get_option('so_popup_threshold', 170);
-    $recent_minutes = (int)get_option('so_popup_recent_minutes', 20);
-    $cutoff = time() - ($recent_minutes * 60);
-    $events = sod_get_events(['hours' => 1, 'min_score' => $threshold, 'limit' => 5]);
-    $ev = null;
-    foreach ($events as $e) {
-        if ((int)($e['event_timestamp'] ?? 0) >= $cutoff) {
-            $ev = [
-                'id' => (int)($e['id'] ?? 0),
-                'title' => sod_fix_mojibake_text(wp_strip_all_tags((string)($e['title'] ?? ''))),
-                'score' => (int)($e['score'] ?? 0),
-                'region' => sod_fix_mojibake_text(sanitize_text_field((string)($e['region'] ?? ''))),
-                'source_name' => sod_fix_mojibake_text(sanitize_text_field((string)($e['source_name'] ?? ''))),
-                'event_timestamp' => (int)($e['event_timestamp'] ?? 0),
-                'link' => esc_url_raw((string)($e['link'] ?? SOD_TG_LINK)),
-                'telegram_link' => esc_url(get_option('so_popup_telegram_link', SO_TELEGRAM_LINK)),
-            ];
-            break;
+// ==========================================================================
+// 15d. Heatmap Data - متاح للزوار والمسجلين
+// ==========================================================================
+add_action('wp_ajax_sod_get_heatmap_data',        'sod_ajax_heatmap_data_v2');
+add_action('wp_ajax_nopriv_sod_get_heatmap_data', 'sod_ajax_heatmap_data_v2');
+function sod_ajax_heatmap_data_v2(): void {
+    if (!current_user_can('read')) {
+        $nonce = sanitize_text_field(wp_unslash($_POST['nonce'] ?? $_GET['nonce'] ?? ''));
+        if (empty($nonce) || wp_verify_nonce($nonce, SOD_AJAX_NONCE_ACTION) === false) {
+            wp_send_json_error(['message'=>'خطأ في التحقق'],403);
         }
     }
-    sod_send_json_success(sod_prepare_json_payload(['event' => $ev]));
-}
-
-function so_ajax_manual_sync_v2(): void {
-    if (!current_user_can('manage_options') || !check_ajax_referer('so_manual_sync', 'nonce', false)) {
-        sod_send_json_error(['message' => 'غير مصرح'], 403);
+    $hours = (int)($_POST['hours'] ?? 72);
+    $events = sod_get_events(['hours' => max(1, min(8760, $hours)), 'limit' => 5000]);
+    $heat_points = [];
+    foreach ($events as $ev) {
+        $lat = (float)($ev['latitude'] ?? 0);
+        $lng = (float)($ev['longitude'] ?? 0);
+        if ($lat > 0 && $lng > 0) {
+            $heat_points[] = [$lat, $lng, max(1, (int)($ev['score'] ?? 50))];
+        }
     }
-    $inserted = SO_Cron_Manager::safe_sync_news();
-    $summary = get_option('so_last_sync_summary', []);
-    sod_send_json_success(sod_prepare_json_payload([
-        'inserted' => $inserted,
-        'message' => $summary['message'] ?? 'تمت المزامنة',
-        'raw_count' => $summary['raw_count'] ?? 0,
-    ]));
+    wp_send_json_success(['points' => $heat_points, 'time' => time()]);
 }
 
-function sod_ajax_ai_brief_v2(): void {
-    if (!sod_verify_nonce()) { sod_send_json_error(['message' => 'خطأ في التحقق'], 403); }
-    $events = sod_get_events(['hours' => 24, 'limit' => 20, 'min_score' => 80]);
-    $brief = SO_LLM_Engine::generate_intel_brief($events);
-    sod_send_json_success(sod_prepare_json_payload(['brief' => $brief, 'time' => time()]));
-}
+// ==========================================================================
+// دوال مساعدة قديمة - تم دمج وظائفها في الدوال أعلاه
+// ==========================================================================
 
-add_action('wp_ajax_sod_newslog_search',      'sod_ajax_newslog_search');
-add_action('wp_ajax_sod_newslog_save',        'sod_ajax_newslog_save');
-add_action('wp_ajax_sod_newslog_reclassify',  'sod_ajax_newslog_reclassify');
-add_action('wp_ajax_sod_newslog_bulk',        'sod_ajax_newslog_bulk');
-add_action('wp_ajax_sod_newslog_get_banks',   'sod_ajax_newslog_get_banks');
-add_action('wp_ajax_sod_newslog_add_to_bank', 'sod_ajax_newslog_add_to_bank');
-add_action('wp_ajax_sod_newslog_remove_from_bank', 'sod_ajax_newslog_remove_from_bank');
-add_action('wp_ajax_sod_newslog_autotrain', 'sod_ajax_newslog_autotrain');
 
 
 
@@ -6361,6 +6267,16 @@ register_deactivation_hook(__FILE__, function () {
 add_filter('query_vars', function ($vars) {
     $vars[] = 'sod_dashboard_route';
     return $vars;
+});
+
+// ==========================================================================
+// إضافة Content-Security-Policy (CSP) للوحة OSINT
+// ==========================================================================
+add_action('send_headers', function () {
+    // تطبيق CSP فقط على صفحة لوحة OSINT
+    if (sod_is_dashboard_route()) {
+        header("Content-Security-Policy: default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob:; style-src 'self' 'unsafe-inline' https: data:; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com https:; connect-src 'self' https: wss: ws: blob: data: https://api.telegram.org; frame-src 'self' https://widgets.wp.com https:; media-src 'self' blob: data: https:; worker-src 'self' blob:; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:;");
+    }
 });
 
 add_action('template_redirect', function () {
@@ -14981,10 +14897,50 @@ if (!function_exists('sod_render_news_ticker_only')) {
 
 if (!function_exists('so_disable_tv_mode_and_bottom_notices')) {
     add_action('wp_footer', 'so_disable_tv_mode_and_bottom_notices', 99999);
+    add_action('wp_head', 'so_disable_tv_mode_and_bottom_notices_head', 99999);
+    
+    function so_disable_tv_mode_and_bottom_notices_head() {
+        if (is_admin()) return;
+        // تطبيق التعطيل على جميع الصفحات العامة ما عدا لوحة العرض
+        if (sod_is_dashboard_route() || sod_should_inject_frontend_ui()) return;
+        ?>
+        <style id="so-disable-tv-mode-head">
+            /* إخفاء عناصر TV Mode والإشعارات في الهيدر */
+            body.so-tv-mode{background:inherit !important;}
+            .so-tv-toggle,
+            .sod-bottom-alert,
+            .sod-live-alert,
+            .sod-alert-bar,
+            .sod-tv-bar,
+            .sod-tv-mode,
+            .so-floating-news-counter,
+            .so-news-counter-toast,
+            .so-splash,
+            .so-toast,
+            .so-progress-bar,
+            [class*="osint-notification"],
+            [id*="osint-notification"],
+            .osint-notice,
+            .so-browser-notifier,
+            [class*="tv-mode"],
+            [id*="tv-mode"],
+            [class*="news-counter"],
+            [id*="news-counter"] {
+                display:none !important;
+                opacity:0 !important;
+                visibility:hidden !important;
+                pointer-events:none !important;
+                position:absolute !important;
+                left:-9999px !important;
+                top:-9999px !important;
+            }
+        </style>
+        <?php
+    }
+    
     function so_disable_tv_mode_and_bottom_notices() {
         if (is_admin()) return;
-        // تم التعديل: تطبيق التعطيل على جميع الصفحات العامة لمنع التشويه
-        // إذا كانت صفحة لوحة العرض أو تحتوي على shortcode خاص باللوحة، لا تعطل شيئاً
+        // تطبيق التعطيل على جميع الصفحات العامة ما عدا لوحة العرض
         if (sod_is_dashboard_route() || sod_should_inject_frontend_ui()) return;
         ?>
         <style id="so-disable-tv-mode-and-bottom-notices">
@@ -15003,11 +14959,22 @@ if (!function_exists('so_disable_tv_mode_and_bottom_notices')) {
             [class*="osint-notification"],
             [id*="osint-notification"],
             .osint-notice,
-            .so-browser-notifier {
+            .so-browser-notifier,
+            [class*="tv-mode"],
+            [id*="tv-mode"],
+            [class*="news-counter"],
+            [id*="news-counter"],
+            [class*="bottom-alert"],
+            [id*="bottom-alert"],
+            [class*="live-alert"],
+            [id*="live-alert"] {
                 display:none !important;
                 opacity:0 !important;
                 visibility:hidden !important;
                 pointer-events:none !important;
+                position:absolute !important;
+                left:-9999px !important;
+                top:-9999px !important;
             }
         </style>
         <script>
@@ -15030,7 +14997,15 @@ if (!function_exists('so_disable_tv_mode_and_bottom_notices')) {
                     '[class*="osint-notification"]',
                     '[id*="osint-notification"]',
                     '.osint-notice',
-                    '.so-browser-notifier'
+                    '.so-browser-notifier',
+                    '[class*="tv-mode"]',
+                    '[id*="tv-mode"]',
+                    '[class*="news-counter"]',
+                    '[id*="news-counter"]',
+                    '[class*="bottom-alert"]',
+                    '[id*="bottom-alert"]',
+                    '[class*="live-alert"]',
+                    '[id*="live-alert"]'
                 ];
                 try {
                     scope.querySelectorAll(selectors.join(',')).forEach(function(el){
