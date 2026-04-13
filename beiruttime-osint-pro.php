@@ -299,7 +299,8 @@ function sod_clean_entity_graph_records(): int {
 }
 
 function sod_should_inject_frontend_ui(): bool {
-    if (is_admin() || sod_is_dashboard_route()) return true;
+    if (is_admin()) return false; // Never inject on admin pages via this check
+    if (sod_is_dashboard_route()) return true;
     global $post;
     if (!$post || empty($post->post_content)) return false;
     foreach ([
