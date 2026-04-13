@@ -6363,6 +6363,16 @@ add_filter('query_vars', function ($vars) {
     return $vars;
 });
 
+// ==========================================================================
+// إضافة Content-Security-Policy (CSP) للوحة OSINT
+// ==========================================================================
+add_action('send_headers', function () {
+    // تطبيق CSP فقط على صفحة لوحة OSINT
+    if (sod_is_dashboard_route()) {
+        header("Content-Security-Policy: default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob:; style-src 'self' 'unsafe-inline' https: data:; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com https:; connect-src 'self' https: wss: ws: blob: data: https://api.telegram.org; frame-src 'self' https://widgets.wp.com https:; media-src 'self' blob: data: https:; worker-src 'self' blob:; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:;");
+    }
+});
+
 add_action('template_redirect', function () {
     if (!sod_is_dashboard_route()) return;
 

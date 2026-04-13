@@ -4,6 +4,7 @@
 __pycache__/
 *.o
 *.obj
+*.class
 *.exe
 *.dll
 *.so
@@ -18,6 +19,8 @@ dist/
 build/
 target/
 .gradle/
+.mypy_cache/
+.pytest_cache/
 
 # Logs and temp files
 *.log
@@ -33,8 +36,6 @@ target/
 # Editors
 .vscode/
 .idea/
-*.swp
-*.swo
 
 # System files
 .DS_Store
@@ -44,12 +45,6 @@ Thumbs.db
 coverage/
 htmlcov/
 .coverage
-
-# Python specific
-*.pyc
-__pycache__/
-.mypy_cache/
-.pytest_cache/
 
 # Compressed files
 *.zip
@@ -70,8 +65,4 @@ __pycache__/
 *.Z
 *.lz
 *.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
 ```
