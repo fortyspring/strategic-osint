@@ -13744,6 +13744,76 @@ add_action('plugins_loaded', function() {
 add_action('init', function() {
     // sod_command_deck, strategic_osint_v7_brief, beiruttime_command_center registered via add_shortcode above
 });
+
+// ==========================================================================
+// Security Headers - تحسين الأمان عبر إضافة HTTP Security Headers
+// ==========================================================================
+add_action('send_headers', function() {
+    // منع التنصت على نوع المحتوى (MIME sniffing)
+    if (!headers_sent()) {
+        header("X-Content-Type-Options: nosniff");
+        header("X-Frame-Options: SAMEORIGIN");
+        header("X-XSS-Protection: 1; mode=block");
+        header("Referrer-Policy: strict-origin-when-cross-origin");
+        // Content Security Policy - السماح فقط بالمصادر الموثوقة
+        header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://maps.googleapis.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://api.telegram.org; frame-ancestors 'self';");
+    }
+}, 999);
+
+// ==========================================================================
+// Rate Limiting System - نظام تحديد معدل الطلبات لمنع الهجمات
+// ==========================================================================
+if (!function_exists('sod_check_rate_limit')) {
+    function sod_check_rate_limit(string $action, int $limit = 60, int $window = 60): bool {
+        $user_id = get_current_user_id();
+        $ip_address = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        $key = 'sod_rate_limit_' . md5($action . '_' . $user_id . '_' . $ip_address);
+        
+        $attempts = (int) get_transient($key);
+        if ($attempts >= $limit) {
+            // تسجيل محاولة تجاوز الحد
+            error_log(sprintf(
+                '[Beiruttime OSINT] Rate limit exceeded: Action=%s, User=%d, IP=%s, Attempts=%d',
+                $action, $user_id, $ip_address, $attempts
+            ));
+            return false;
+        }
+        
+        set_transient($key, $attempts + 1, $window);
+        return true;
+    }
+}
+
+// تطبيق Rate Limiting على AJAX endpoints
+add_action('wp_ajax_sod_get_dashboard_data', 'sod_apply_rate_limit_dashboard', 1);
+add_action('wp_ajax_sod_get_ticker_data', 'sod_apply_rate_limit_ticker', 1);
+add_action('wp_ajax_sod_get_threat_analysis', 'sod_apply_rate_limit_threat', 1);
+add_action('wp_ajax_sod_get_ai_brief', 'sod_apply_rate_limit_brief', 1);
+
+function sod_apply_rate_limit_dashboard() {
+    if (!sod_check_rate_limit('dashboard_data', 30, 60)) {
+        wp_send_json_error(['message' => 'تم تجاوز حد الطلبات المسموح. يرجى المحاولة لاحقاً.'], 429);
+    }
+}
+
+function sod_apply_rate_limit_ticker() {
+    if (!sod_check_rate_limit('ticker_data', 60, 60)) {
+        wp_send_json_error(['message' => 'تم تجاوز حد الطلبات المسموح. يرجى المحاولة لاحقاً.'], 429);
+    }
+}
+
+function sod_apply_rate_limit_threat() {
+    if (!sod_check_rate_limit('threat_analysis', 30, 60)) {
+        wp_send_json_error(['message' => 'تم تجاوز حد الطلبات المسموح. يرجى المحاولة لاحقاً.'], 429);
+    }
+}
+
+function sod_apply_rate_limit_brief() {
+    if (!sod_check_rate_limit('ai_brief', 10, 120)) {
+        wp_send_json_error(['message' => 'تم تجاوز حد الطلبات المسموح. يرجى المحاولة لاحقاً.'], 429);
+    }
+}
+
 // ==========================================================================
 // 25. إضافات عصرية وتجربة مستخدم محسّنة (آمنة للإضافة في أي وقت)
 // ==========================================================================
