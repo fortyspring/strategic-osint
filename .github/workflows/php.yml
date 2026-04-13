@@ -44,8 +44,11 @@ jobs:
       if: steps.check-composer.outputs.exists == 'true'
       run: composer install --prefer-dist --no-progress
 
-    # Add a test script to composer.json, for instance: "test": "vendor/bin/phpunit"
-    # Docs: https://getcomposer.org/doc/articles/scripts.md
-
-    # - name: Run test suite
-    #   run: composer run-script test
+    - name: Run PHPUnit tests (if phpunit.xml exists)
+      if: steps.check-composer.outputs.exists == 'true'
+      run: |
+        if [ -f "phpunit.xml" ] || [ -f "phpunit.xml.dist" ]; then
+          composer run-script test
+        else
+          echo "No PHPUnit configuration found, skipping tests"
+        fi
