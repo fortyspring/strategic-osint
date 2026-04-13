@@ -15831,6 +15831,16 @@ add_action('wp_ajax_so_ajax_duplicate_cleanup_reset', ['SO_Admin_UI', 'ajax_dupl
 add_action('wp_ajax_so_ajax_reanalyze_batch', ['SO_Admin_UI', 'ajax_reanalyze_batch']);
 add_action('wp_ajax_so_ajax_reanalyze_reset', ['SO_Admin_UI', 'ajax_reanalyze_reset']);
 
+// NewsLog AJAX Handlers
+add_action('wp_ajax_sod_newslog_search', 'sod_ajax_newslog_search');
+add_action('wp_ajax_sod_newslog_save', 'sod_ajax_newslog_save');
+add_action('wp_ajax_sod_newslog_reclassify', 'sod_ajax_newslog_reclassify');
+add_action('wp_ajax_sod_newslog_bulk', 'sod_ajax_newslog_bulk');
+add_action('wp_ajax_sod_newslog_get_banks', 'sod_ajax_newslog_get_banks');
+add_action('wp_ajax_sod_newslog_add_to_bank', 'sod_ajax_newslog_add_to_bank');
+add_action('wp_ajax_sod_newslog_remove_from_bank', 'sod_ajax_newslog_remove_from_bank');
+add_action('wp_ajax_sod_newslog_autotrain', 'sod_ajax_newslog_autotrain');
+
 
 
 
